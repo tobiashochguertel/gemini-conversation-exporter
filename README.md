@@ -43,6 +43,15 @@ dist/gemini-conversation-exporter.user.js
 
 ## Install
 
+### Greasy Fork
+
+1. Install and enable Tampermonkey in Google Chrome.
+2. Open [Gemini Conversation Exporter on Greasy Fork][greasy-fork].
+3. Select **Install this script**.
+4. Open or reload a Gemini conversation.
+
+### Local development build
+
 1. Install and enable Tampermonkey in Google Chrome.
 2. Build and serve the project:
 
@@ -66,6 +75,9 @@ click downloads the complete active branch as a `.md` file.
 Tampermonkey stores the userscript in the current Chrome profile. It persists
 across Codex tasks and project restarts; the local server is needed only while
 installing or updating the script.
+
+Greasy Fork automatically syncs released code from the committed userscript on
+the `main` branch.
 
 ## Output
 
@@ -93,3 +105,5 @@ Gemini's history RPC and response indexes are private implementation details.
 The script therefore validates the expected shape and refuses to produce a file
 when that shape changes. A future Gemini update may require adjusting the RPC
 identifier or turn-field indexes.
+
+[greasy-fork]: https://greasyfork.org/en/scripts/588720-gemini-conversation-exporter
