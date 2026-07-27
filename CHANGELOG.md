@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 - 2026-07-27
+
+- Render turn headings as their literal stable anchors (`## turn-1`, `## turn-2`,
+  and so on) so outline links work consistently across Obsidian and
+  slug-based Markdown renderers.
+
 ## 0.1.5 - 2026-07-27
 
 - Add a compact split export control with an on-page options popover.

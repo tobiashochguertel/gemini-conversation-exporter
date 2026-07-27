@@ -157,7 +157,8 @@ test("renders original Markdown and LaTeX without conversion", () => {
     /^1\. \[Turn 1 — Why does x\^2 matter\?\]\(#turn-1\)$/m,
   );
   assert.match(markdown, /^2\. \[Turn 2 — Show a table\.\]\(#turn-2\)$/m);
-  assert.match(markdown, /^## Turn 1$/m);
+  assert.match(markdown, /^## turn-1$/m);
+  assert.match(markdown, /^## turn-2$/m);
   assert.match(markdown, /^### User$/m);
   assert.match(markdown, /^### Gemini$/m);
   assert.match(markdown, /\$\$\nx\^2 \\ge 0\n\$\$/);
@@ -180,7 +181,7 @@ test("always renders an enabled outline for a one-turn conversation", () => {
 
   assert.match(markdown, /^## Conversation outline$/m);
   assert.match(markdown, /^1\. \[Turn 1 — /m);
-  assert.match(markdown, /^## Turn 1$/m);
+  assert.match(markdown, /^## turn-1$/m);
 });
 
 test("omits export and turn metadata when disabled", () => {
@@ -218,7 +219,7 @@ test("restores the original role-only structure when outline is disabled", () =>
   });
 
   assert.doesNotMatch(markdown, /^## Conversation outline$/m);
-  assert.doesNotMatch(markdown, /^## Turn 1$/m);
+  assert.doesNotMatch(markdown, /^## turn-1$/m);
   assert.match(markdown, /^## User$/m);
   assert.match(markdown, /^## Gemini$/m);
 });

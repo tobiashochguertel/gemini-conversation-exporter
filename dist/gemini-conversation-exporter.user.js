@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gemini Conversation Exporter
 // @namespace    local.gemini-web-exporter
-// @version      0.1.5
+// @version      0.1.6
 // @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
 // @author       dikelps
 // @license      MIT
@@ -506,7 +506,7 @@
         }
 
         if (includeOutline) {
-          lines.push(`## Turn ${index + 1}`, "", "### User", "");
+          lines.push(`## turn-${index + 1}`, "", "### User", "");
         } else {
           lines.push("## User", "");
         }

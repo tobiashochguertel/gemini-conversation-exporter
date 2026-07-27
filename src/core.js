@@ -487,7 +487,7 @@
         }
 
         if (includeOutline) {
-          lines.push(`## Turn ${index + 1}`, "", "### User", "");
+          lines.push(`## turn-${index + 1}`, "", "### User", "");
         } else {
           lines.push("## User", "");
         }

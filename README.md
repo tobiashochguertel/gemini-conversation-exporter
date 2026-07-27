@@ -98,7 +98,8 @@ The file includes:
 - conversation title and source URL;
 - export timestamp, conversation ID, turn count, and validation fingerprint;
 - stable response/candidate identifiers in HTML comments;
-- a linked turn outline using short previews of user prompts;
+- a linked turn outline using short previews of user prompts and stable
+  cross-renderer turn anchors;
 - explicit User and Gemini role boundaries;
 - the original user and Gemini Markdown, including `$...$` and `$$...$$`
   equations, tables, lists, links, and fenced code.
