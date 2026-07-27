@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+coverage/
+.env
+.env.*
+
+# Local research transcript; not part of the distributable project.
+ChatGPT-Gemini_Web_Exporters.md

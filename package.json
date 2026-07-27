@@ -1,0 +1,24 @@
+{
+  "name": "gemini-conversation-exporter",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Reliable single-conversation Markdown exporter for Gemini Web",
+  "author": "dikelps",
+  "license": "MIT",
+  "homepage": "https://github.com/dikelps/gemini-conversation-exporter",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dikelps/gemini-conversation-exporter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dikelps/gemini-conversation-exporter/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test",
+    "check": "npm test && npm run build"
+  }
+}
