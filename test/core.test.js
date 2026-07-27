@@ -172,6 +172,28 @@ test("extracts conversation IDs from default and account-scoped Gemini URLs", ()
   assert.equal(Core.conversationIdFromPath("/u/12/app/abc123"), "c_abc123");
 });
 
+test("preserves every numeric account slot in Gemini RPC paths", () => {
+  const rpcPath = "/_/BardChatUi/data/batchexecute";
+
+  assert.equal(Core.accountScopedPath("/app/abc123", rpcPath), rpcPath);
+  assert.equal(
+    Core.accountScopedPath("/u/0/app/abc123", rpcPath),
+    "/u/0/_/BardChatUi/data/batchexecute",
+  );
+  assert.equal(
+    Core.accountScopedPath("/u/1/app/abc123", rpcPath),
+    "/u/1/_/BardChatUi/data/batchexecute",
+  );
+  assert.equal(
+    Core.accountScopedPath("/u/27/app/abc123", rpcPath),
+    "/u/27/_/BardChatUi/data/batchexecute",
+  );
+  assert.equal(
+    Core.accountScopedPath("/u/account/app/abc123", rpcPath),
+    rpcPath,
+  );
+});
+
 test("rejects paths that are not Gemini conversation routes", () => {
   assert.equal(Core.conversationIdFromPath("/app"), null);
   assert.equal(Core.conversationIdFromPath("/u/0/app"), null);
@@ -199,6 +221,22 @@ test("userscript clones request options into Firefox's page realm", () => {
   assert.match(
     userscriptMain,
     /pageWindow\.fetch\(\s*endpoint\.toString\(\),\s*requestOptions/,
+  );
+});
+
+test("userscript preserves the active account slot for history requests", () => {
+  const userscriptMain = fs.readFileSync(
+    path.resolve(__dirname, "../src/userscript-main.js"),
+    "utf8",
+  );
+
+  assert.match(
+    userscriptMain,
+    /Core\.accountScopedPath\(\s*location\.pathname,\s*"\/_\/BardChatUi\/data\/batchexecute"/,
+  );
+  assert.match(
+    userscriptMain,
+    /new URLSearchParams\(location\.search\)\.get\("pageId"\)/,
   );
 });
 

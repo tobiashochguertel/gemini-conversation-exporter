@@ -460,6 +460,15 @@
         : `c_${conversationId}`;
     }
 
+    function accountScopedPath(pathname, targetPath) {
+      const accountMatch = String(pathname).match(/^\/u\/(\d+)(?:\/|$)/);
+      const normalizedTarget = `/${String(targetPath).replace(/^\/+/, "")}`;
+
+      return accountMatch
+        ? `/u/${accountMatch[1]}${normalizedTarget}`
+        : normalizedTarget;
+    }
+
     function cleanDocumentTitle(documentTitle) {
       const withoutProduct = String(documentTitle || "")
         .replace(/\s*[-–—]\s*Google Gemini\s*$/i, "")
@@ -482,6 +491,7 @@
 
     return Object.freeze({
       HISTORY_RPC_ID,
+      accountScopedPath,
       cleanDocumentTitle,
       collectHistoryPages,
       conversationIdFromPath,

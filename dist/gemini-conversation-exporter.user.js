@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gemini Conversation Exporter
 // @namespace    local.gemini-web-exporter
-// @version      0.1.3
+// @version      0.1.4
 // @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
 // @author       dikelps
 // @license      MIT
@@ -477,6 +477,15 @@
         : `c_${conversationId}`;
     }
 
+    function accountScopedPath(pathname, targetPath) {
+      const accountMatch = String(pathname).match(/^\/u\/(\d+)(?:\/|$)/);
+      const normalizedTarget = `/${String(targetPath).replace(/^\/+/, "")}`;
+
+      return accountMatch
+        ? `/u/${accountMatch[1]}${normalizedTarget}`
+        : normalizedTarget;
+    }
+
     function cleanDocumentTitle(documentTitle) {
       const withoutProduct = String(documentTitle || "")
         .replace(/\s*[-–—]\s*Google Gemini\s*$/i, "")
@@ -499,6 +508,7 @@
 
     return Object.freeze({
       HISTORY_RPC_ID,
+      accountScopedPath,
       cleanDocumentTitle,
       collectHistoryPages,
       conversationIdFromPath,
@@ -570,6 +580,10 @@
       _reqid: makeRequestId(),
       rt: "c",
     });
+    const pageId = new URLSearchParams(location.search).get("pageId");
+    if (pageId) {
+      query.set("pageId", pageId);
+    }
     const rpcArguments = [
       conversationId,
       HISTORY_PAGE_SIZE,
@@ -590,10 +604,11 @@
       "f.req": JSON.stringify([[rpcCall]]),
       at: config.SNlM0e,
     });
-    const endpoint = new URL(
+    const endpointPath = Core.accountScopedPath(
+      location.pathname,
       "/_/BardChatUi/data/batchexecute",
-      location.origin,
     );
+    const endpoint = new URL(endpointPath, location.origin);
     endpoint.search = query.toString();
 
     const requestOptions = cloneForPageRealm({

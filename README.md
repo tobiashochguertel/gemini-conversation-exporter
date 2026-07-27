@@ -19,6 +19,8 @@ Gemini page and the Markdown file downloaded by the browser.
 
 - Retrieves every history page rather than relying on rendered/virtualized
   messages.
+- Preserves Gemini's numeric account slot when requesting history, so secondary
+  accounts such as `/u/1/` do not fall back to account 0.
 - Reverses Gemini's observed response sequence only once: server pages arrive
   newest-first and the file is written oldest-first.
 - Deduplicates overlapping history pages by stable response ID.

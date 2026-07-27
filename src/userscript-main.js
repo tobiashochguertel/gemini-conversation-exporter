@@ -54,6 +54,10 @@
       _reqid: makeRequestId(),
       rt: "c",
     });
+    const pageId = new URLSearchParams(location.search).get("pageId");
+    if (pageId) {
+      query.set("pageId", pageId);
+    }
     const rpcArguments = [
       conversationId,
       HISTORY_PAGE_SIZE,
@@ -74,10 +78,11 @@
       "f.req": JSON.stringify([[rpcCall]]),
       at: config.SNlM0e,
     });
-    const endpoint = new URL(
+    const endpointPath = Core.accountScopedPath(
+      location.pathname,
       "/_/BardChatUi/data/batchexecute",
-      location.origin,
     );
+    const endpoint = new URL(endpointPath, location.origin);
     endpoint.search = query.toString();
 
     const requestOptions = cloneForPageRealm({
