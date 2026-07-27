@@ -37,6 +37,12 @@
     return String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
   }
 
+  function cloneForPageRealm(value) {
+    return typeof cloneInto === "function"
+      ? cloneInto(value, pageWindow)
+      : value;
+  }
+
   async function fetchHistoryPage(conversationId, cursor) {
     const config = getGeminiConfig();
     const query = new URLSearchParams({
@@ -74,7 +80,7 @@
     );
     endpoint.search = query.toString();
 
-    const response = await pageWindow.fetch(endpoint.toString(), {
+    const requestOptions = cloneForPageRealm({
       method: "POST",
       credentials: "same-origin",
       headers: {
@@ -83,6 +89,10 @@
       },
       body: body.toString(),
     });
+    const response = await pageWindow.fetch(
+      endpoint.toString(),
+      requestOptions,
+    );
     const text = await response.text();
 
     if (!response.ok) {

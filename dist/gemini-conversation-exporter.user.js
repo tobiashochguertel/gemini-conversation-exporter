@@ -1,15 +1,17 @@
 // ==UserScript==
 // @name         Gemini Conversation Exporter
 // @namespace    local.gemini-web-exporter
-// @version      0.1.2
+// @version      0.1.3
 // @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
 // @author       dikelps
 // @license      MIT
 // @homepageURL  https://github.com/dikelps/gemini-conversation-exporter
 // @supportURL   https://github.com/dikelps/gemini-conversation-exporter/issues
 // @match        https://gemini.google.com/app/*
+// @match        https://gemini.google.com/u/*/app/*
 // @run-at       document-idle
 // @grant        unsafeWindow
+// @sandbox      JavaScript
 // @noframes
 // ==/UserScript==
 
@@ -462,11 +464,17 @@
 
     function conversationIdFromPath(pathname) {
       const parts = String(pathname).split("/").filter(Boolean);
-      if (parts[0] !== "app" || !parts[1]) {
+      const appIndex =
+        parts[0] === "u" && /^\d+$/.test(parts[1] || "") ? 2 : 0;
+
+      if (parts[appIndex] !== "app" || !parts[appIndex + 1]) {
         return null;
       }
 
-      return parts[1].startsWith("c_") ? parts[1] : `c_${parts[1]}`;
+      const conversationId = parts[appIndex + 1];
+      return conversationId.startsWith("c_")
+        ? conversationId
+        : `c_${conversationId}`;
     }
 
     function cleanDocumentTitle(documentTitle) {
@@ -545,6 +553,12 @@
     return String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
   }
 
+  function cloneForPageRealm(value) {
+    return typeof cloneInto === "function"
+      ? cloneInto(value, pageWindow)
+      : value;
+  }
+
   async function fetchHistoryPage(conversationId, cursor) {
     const config = getGeminiConfig();
     const query = new URLSearchParams({
@@ -582,7 +596,7 @@
     );
     endpoint.search = query.toString();
 
-    const response = await pageWindow.fetch(endpoint.toString(), {
+    const requestOptions = cloneForPageRealm({
       method: "POST",
       credentials: "same-origin",
       headers: {
@@ -591,6 +605,10 @@
       },
       body: body.toString(),
     });
+    const response = await pageWindow.fetch(
+      endpoint.toString(),
+      requestOptions,
+    );
     const text = await response.text();
 
     if (!response.ok) {

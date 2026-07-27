@@ -24,8 +24,10 @@ const metadata = `// ==UserScript==
 // @homepageURL  https://github.com/dikelps/gemini-conversation-exporter
 // @supportURL   https://github.com/dikelps/gemini-conversation-exporter/issues
 // @match        https://gemini.google.com/app/*
+// @match        https://gemini.google.com/u/*/app/*
 // @run-at       document-idle
 // @grant        unsafeWindow
+// @sandbox      JavaScript
 // @noframes
 // ==/UserScript==
 `;

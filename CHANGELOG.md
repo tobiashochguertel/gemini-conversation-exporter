@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3 - 2026-07-27
+
+- Support account-scoped Gemini URLs such as `/u/0/app/...`.
+- Use Tampermonkey's JavaScript sandbox so Firefox can inject through Gemini's
+  Content Security Policy.
+- Clone page-fetch request options into Firefox's page realm.
+
 ## 0.1.2 - 2026-07-27
 
 - Prepare the first public release.

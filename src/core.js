@@ -447,11 +447,17 @@
 
     function conversationIdFromPath(pathname) {
       const parts = String(pathname).split("/").filter(Boolean);
-      if (parts[0] !== "app" || !parts[1]) {
+      const appIndex =
+        parts[0] === "u" && /^\d+$/.test(parts[1] || "") ? 2 : 0;
+
+      if (parts[appIndex] !== "app" || !parts[appIndex + 1]) {
         return null;
       }
 
-      return parts[1].startsWith("c_") ? parts[1] : `c_${parts[1]}`;
+      const conversationId = parts[appIndex + 1];
+      return conversationId.startsWith("c_")
+        ? conversationId
+        : `c_${conversationId}`;
     }
 
     function cleanDocumentTitle(documentTitle) {

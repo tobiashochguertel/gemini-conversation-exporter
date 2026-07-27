@@ -9,10 +9,11 @@ preserves Gemini's original Markdown and LaTeX source.
 
 ## Privacy
 
-The userscript runs only on `https://gemini.google.com/app/*`. It makes no
-third-party requests and does not collect analytics. Conversation data stays
-between the signed-in Gemini page and the Markdown file downloaded by the
-browser.
+The userscript runs only on Gemini conversation pages:
+`https://gemini.google.com/app/*` and
+`https://gemini.google.com/u/*/app/*`. It makes no third-party requests and
+does not collect analytics. Conversation data stays between the signed-in
+Gemini page and the Markdown file downloaded by the browser.
 
 ## Reliability behavior
 
@@ -45,14 +46,14 @@ dist/gemini-conversation-exporter.user.js
 
 ### Greasy Fork
 
-1. Install and enable Tampermonkey in Google Chrome.
+1. Install and enable Tampermonkey in Chrome or Firefox.
 2. Open [Gemini Conversation Exporter on Greasy Fork][greasy-fork].
 3. Select **Install this script**.
 4. Open or reload a Gemini conversation.
 
 ### Local development build
 
-1. Install and enable Tampermonkey in Google Chrome.
+1. Install and enable Tampermonkey in Chrome or Firefox.
 2. Build and serve the project:
 
    ```bash
@@ -60,7 +61,7 @@ dist/gemini-conversation-exporter.user.js
    python3 -m http.server 8765 --bind 127.0.0.1
    ```
 
-3. Open this URL in Chrome:
+3. Open this URL in the browser:
 
    ```text
    http://127.0.0.1:8765/dist/gemini-conversation-exporter.user.js
@@ -72,7 +73,7 @@ dist/gemini-conversation-exporter.user.js
 The script adds an **Export Markdown** button in the lower-right corner. One
 click downloads the complete active branch as a `.md` file.
 
-Tampermonkey stores the userscript in the current Chrome profile. It persists
+Tampermonkey stores the userscript in the current browser profile. It persists
 across Codex tasks and project restarts; the local server is needed only while
 installing or updating the script.
 

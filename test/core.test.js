@@ -165,6 +165,20 @@ test("creates filesystem-safe Markdown filenames", () => {
   );
 });
 
+test("extracts conversation IDs from default and account-scoped Gemini URLs", () => {
+  assert.equal(Core.conversationIdFromPath("/app/abc123"), "c_abc123");
+  assert.equal(Core.conversationIdFromPath("/app/c_abc123"), "c_abc123");
+  assert.equal(Core.conversationIdFromPath("/u/0/app/abc123"), "c_abc123");
+  assert.equal(Core.conversationIdFromPath("/u/12/app/abc123"), "c_abc123");
+});
+
+test("rejects paths that are not Gemini conversation routes", () => {
+  assert.equal(Core.conversationIdFromPath("/app"), null);
+  assert.equal(Core.conversationIdFromPath("/u/0/app"), null);
+  assert.equal(Core.conversationIdFromPath("/u/account/app/abc123"), null);
+  assert.equal(Core.conversationIdFromPath("/search"), null);
+});
+
 test("userscript UI remains compatible with Gemini Trusted Types", () => {
   const userscriptMain = fs.readFileSync(
     path.resolve(__dirname, "../src/userscript-main.js"),
@@ -172,4 +186,31 @@ test("userscript UI remains compatible with Gemini Trusted Types", () => {
   );
 
   assert.doesNotMatch(userscriptMain, /\.innerHTML\s*=/);
+});
+
+test("userscript clones request options into Firefox's page realm", () => {
+  const userscriptMain = fs.readFileSync(
+    path.resolve(__dirname, "../src/userscript-main.js"),
+    "utf8",
+  );
+
+  assert.match(userscriptMain, /typeof cloneInto === "function"/);
+  assert.match(userscriptMain, /cloneInto\(value, pageWindow\)/);
+  assert.match(
+    userscriptMain,
+    /pageWindow\.fetch\(\s*endpoint\.toString\(\),\s*requestOptions/,
+  );
+});
+
+test("userscript metadata supports account routes and Firefox CSP", () => {
+  const buildScript = fs.readFileSync(
+    path.resolve(__dirname, "../scripts/build.js"),
+    "utf8",
+  );
+
+  assert.match(
+    buildScript,
+    /@match\s+https:\/\/gemini\.google\.com\/u\/\*\/app\/\*/,
+  );
+  assert.match(buildScript, /@sandbox\s+JavaScript/);
 });
