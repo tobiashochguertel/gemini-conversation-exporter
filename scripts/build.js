@@ -27,6 +27,8 @@ const metadata = `// ==UserScript==
 // @match        https://gemini.google.com/u/*/app/*
 // @run-at       document-idle
 // @grant        unsafeWindow
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @sandbox      JavaScript
 // @noframes
 // ==/UserScript==

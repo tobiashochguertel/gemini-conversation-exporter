@@ -8,6 +8,11 @@
 
   const ROOT_ID = "gemini-web-exporter-root";
   const HISTORY_PAGE_SIZE = 50;
+  const PREFERENCE_KEYS = Object.freeze({
+    collapsed: "ui.collapsed",
+    includeMetadata: "export.includeMetadata",
+    includeOutline: "export.includeOutline",
+  });
   const pageWindow =
     typeof unsafeWindow !== "undefined" ? unsafeWindow : globalThis;
 
@@ -41,6 +46,32 @@
     return typeof cloneInto === "function"
       ? cloneInto(value, pageWindow)
       : value;
+  }
+
+  function readBooleanPreference(key, fallback) {
+    if (typeof GM_getValue !== "function") {
+      return fallback;
+    }
+
+    try {
+      const value = GM_getValue(key, fallback);
+      return typeof value === "boolean" ? value : fallback;
+    } catch (error) {
+      console.warn("[Gemini Exporter] Could not read preference", key, error);
+      return fallback;
+    }
+  }
+
+  function writeBooleanPreference(key, value) {
+    if (typeof GM_setValue !== "function") {
+      return;
+    }
+
+    try {
+      GM_setValue(key, Boolean(value));
+    } catch (error) {
+      console.warn("[Gemini Exporter] Could not save preference", key, error);
+    }
   }
 
   async function fetchHistoryPage(conversationId, cursor) {
@@ -127,6 +158,17 @@
   }
 
   function createUi() {
+    const preferences = {
+      collapsed: readBooleanPreference(PREFERENCE_KEYS.collapsed, false),
+      includeMetadata: readBooleanPreference(
+        PREFERENCE_KEYS.includeMetadata,
+        true,
+      ),
+      includeOutline: readBooleanPreference(
+        PREFERENCE_KEYS.includeOutline,
+        true,
+      ),
+    };
     const host = document.createElement("div");
     host.id = ROOT_ID;
     const shadow = host.attachShadow({ mode: "open" });
@@ -148,31 +190,159 @@
           gap: 10px;
         }
 
+        button,
+        input {
+          font: inherit;
+        }
+
         button {
           appearance: none;
+          border: 0;
+          cursor: pointer;
+        }
+
+        .control {
+          display: flex;
+          overflow: hidden;
           border: 1px solid rgba(255, 255, 255, 0.22);
           border-radius: 999px;
           background: #1f1f1f;
           color: #fff;
-          cursor: pointer;
-          font: 600 14px/1 system-ui, -apple-system, sans-serif;
-          min-width: 132px;
-          padding: 13px 18px;
           box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
         }
 
-        button:hover {
+        .export-button,
+        .menu-button {
+          display: inline-flex;
+          min-height: 42px;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          color: inherit;
+        }
+
+        .export-button {
+          gap: 8px;
+          min-width: 142px;
+          padding: 0 16px;
+          font-weight: 650;
+          white-space: nowrap;
+          transition: min-width 120ms ease, padding 120ms ease;
+        }
+
+        .download-icon {
+          font-size: 18px;
+          line-height: 1;
+        }
+
+        .menu-button {
+          width: 38px;
+          border-left: 1px solid rgba(255, 255, 255, 0.16);
+          font-size: 21px;
+          line-height: 1;
+        }
+
+        .control[data-collapsed="true"] .export-button {
+          min-width: 42px;
+          padding: 0 12px;
+        }
+
+        .control[data-collapsed="true"] .export-label {
+          display: none;
+        }
+
+        .export-button:hover,
+        .menu-button:hover {
           background: #303030;
         }
 
         button:focus-visible {
           outline: 3px solid #a8c7fa;
-          outline-offset: 2px;
+          outline-offset: -3px;
         }
 
         button:disabled {
           cursor: progress;
           opacity: 0.72;
+        }
+
+        .panel {
+          box-sizing: border-box;
+          width: min(270px, calc(100vw - 32px));
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          border-radius: 14px;
+          background: #1f1f1f;
+          color: #fff;
+          padding: 14px;
+          box-shadow: 0 6px 24px rgba(0, 0, 0, 0.34);
+        }
+
+        .panel[hidden] {
+          display: none;
+        }
+
+        .panel-heading {
+          margin: 0 0 10px;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+        }
+
+        .option {
+          display: grid;
+          grid-template-columns: 20px minmax(0, 1fr);
+          gap: 9px;
+          align-items: start;
+          border-radius: 9px;
+          cursor: pointer;
+          padding: 8px 6px;
+        }
+
+        .option:hover {
+          background: rgba(255, 255, 255, 0.07);
+        }
+
+        .option input {
+          width: 16px;
+          height: 16px;
+          margin: 1px 0 0;
+          accent-color: #a8c7fa;
+        }
+
+        .option-copy {
+          display: flex;
+          min-width: 0;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .option-label {
+          font-size: 13px;
+          font-weight: 650;
+          line-height: 1.2;
+        }
+
+        .option-description {
+          color: #c7c7c7;
+          font-size: 11px;
+          font-weight: 450;
+          line-height: 1.35;
+        }
+
+        .compact-toggle {
+          width: 100%;
+          margin-top: 10px;
+          border-top: 1px solid rgba(255, 255, 255, 0.14);
+          background: transparent;
+          color: #a8c7fa;
+          padding: 12px 6px 3px;
+          text-align: left;
+          font-size: 12px;
+          font-weight: 650;
+        }
+
+        .compact-toggle:hover {
+          color: #d3e3fd;
         }
 
         .toast {
@@ -191,6 +361,13 @@
         .toast[data-kind="error"] {
           background: #8c1d18;
         }
+
+        @media (max-width: 520px) {
+          :host {
+            right: 12px;
+            bottom: 12px;
+          }
+        }
     `;
 
     const stack = document.createElement("div");
@@ -201,11 +378,105 @@
     toast.setAttribute("role", "status");
     toast.setAttribute("aria-live", "polite");
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Export Markdown";
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.hidden = true;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Export options");
 
-    stack.append(toast, button);
+    const panelHeading = document.createElement("p");
+    panelHeading.className = "panel-heading";
+    panelHeading.textContent = "Export options";
+
+    function createOption({
+      label,
+      description,
+      checked,
+      onChange,
+    }) {
+      const option = document.createElement("label");
+      option.className = "option";
+
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = checked;
+      input.addEventListener("change", () => onChange(input.checked));
+
+      const copy = document.createElement("span");
+      copy.className = "option-copy";
+
+      const optionLabel = document.createElement("span");
+      optionLabel.className = "option-label";
+      optionLabel.textContent = label;
+
+      const optionDescription = document.createElement("span");
+      optionDescription.className = "option-description";
+      optionDescription.textContent = description;
+
+      copy.append(optionLabel, optionDescription);
+      option.append(input, copy);
+      return { option, input };
+    }
+
+    const outlineOption = createOption({
+      label: "Conversation outline",
+      description: "Linked turn list with short prompt previews",
+      checked: preferences.includeOutline,
+      onChange(value) {
+        preferences.includeOutline = value;
+        writeBooleanPreference(PREFERENCE_KEYS.includeOutline, value);
+      },
+    });
+    const metadataOption = createOption({
+      label: "Export metadata",
+      description: "Source, export details, validation and turn IDs",
+      checked: preferences.includeMetadata,
+      onChange(value) {
+        preferences.includeMetadata = value;
+        writeBooleanPreference(PREFERENCE_KEYS.includeMetadata, value);
+      },
+    });
+
+    const compactToggle = document.createElement("button");
+    compactToggle.type = "button";
+    compactToggle.className = "compact-toggle";
+
+    panel.append(
+      panelHeading,
+      outlineOption.option,
+      metadataOption.option,
+      compactToggle,
+    );
+
+    const control = document.createElement("div");
+    control.className = "control";
+
+    const exportButton = document.createElement("button");
+    exportButton.type = "button";
+    exportButton.className = "export-button";
+    exportButton.setAttribute("aria-label", "Export Markdown");
+
+    const downloadIcon = document.createElement("span");
+    downloadIcon.className = "download-icon";
+    downloadIcon.setAttribute("aria-hidden", "true");
+    downloadIcon.textContent = "↓";
+
+    const exportLabel = document.createElement("span");
+    exportLabel.className = "export-label";
+    exportLabel.textContent = "Export Markdown";
+
+    exportButton.append(downloadIcon, exportLabel);
+
+    const menuButton = document.createElement("button");
+    menuButton.type = "button";
+    menuButton.className = "menu-button";
+    menuButton.textContent = "⋮";
+    menuButton.setAttribute("aria-label", "Export options");
+    menuButton.setAttribute("aria-haspopup", "dialog");
+    menuButton.setAttribute("aria-expanded", "false");
+
+    control.append(exportButton, menuButton);
+    stack.append(toast, panel, control);
     shadow.append(style, stack);
     let toastTimer = null;
 
@@ -219,6 +490,24 @@
       }, duration);
     }
 
+    function setPanelOpen(open) {
+      panel.hidden = !open;
+      menuButton.setAttribute("aria-expanded", String(open));
+    }
+
+    function setCollapsed(collapsed, persist = true) {
+      preferences.collapsed = collapsed;
+      control.dataset.collapsed = String(collapsed);
+      exportButton.title = collapsed ? "Export Markdown" : "";
+      compactToggle.textContent = collapsed
+        ? "Use expanded control"
+        : "Use compact control";
+
+      if (persist) {
+        writeBooleanPreference(PREFERENCE_KEYS.collapsed, collapsed);
+      }
+    }
+
     async function exportCurrentConversation() {
       const conversationId = Core.conversationIdFromPath(location.pathname);
       if (!conversationId) {
@@ -226,8 +515,11 @@
         return;
       }
 
-      button.disabled = true;
-      button.textContent = "Exporting…";
+      setPanelOpen(false);
+      exportButton.disabled = true;
+      exportButton.setAttribute("aria-label", "Exporting");
+      downloadIcon.textContent = "…";
+      exportLabel.textContent = "Exporting…";
 
       try {
         const history = await Core.collectHistoryPages((cursor) =>
@@ -246,6 +538,8 @@
           exportedAt,
           turns,
           diagnostics,
+          includeMetadata: preferences.includeMetadata,
+          includeOutline: preferences.includeOutline,
         });
         const filename = Core.safeFilename(title);
 
@@ -268,13 +562,38 @@
           15_000,
         );
       } finally {
-        button.disabled = false;
-        button.textContent = "Export Markdown";
+        exportButton.disabled = false;
+        exportButton.setAttribute("aria-label", "Export Markdown");
+        downloadIcon.textContent = "↓";
+        exportLabel.textContent = "Export Markdown";
       }
     }
 
-    button.addEventListener("click", exportCurrentConversation);
-    return { host, button };
+    exportButton.addEventListener("click", exportCurrentConversation);
+    menuButton.addEventListener("click", () => {
+      setPanelOpen(panel.hidden);
+    });
+    compactToggle.addEventListener("click", () => {
+      setCollapsed(!preferences.collapsed);
+      setPanelOpen(false);
+    });
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!event.composedPath().includes(host)) {
+          setPanelOpen(false);
+        }
+      },
+      true,
+    );
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        setPanelOpen(false);
+      }
+    });
+
+    setCollapsed(preferences.collapsed, false);
+    return { host, exportButton };
   }
 
   const ui = createUi();

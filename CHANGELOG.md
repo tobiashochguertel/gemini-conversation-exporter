@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5 - 2026-07-27
+
+- Add a compact split export control with an on-page options popover.
+- Remember compact mode and export preferences across browser sessions.
+- Add optional export metadata, enabled by default.
+- Add an optional linked conversation outline with prompt previews, enabled by
+  default.
+
 ## 0.1.4 - 2026-07-27
 
 - Preserve Gemini's `/u/<account>/` prefix on history RPC requests.

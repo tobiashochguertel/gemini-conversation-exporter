@@ -75,6 +75,15 @@ dist/gemini-conversation-exporter.user.js
 The script adds an **Export Markdown** button in the lower-right corner. One
 click downloads the complete active branch as a `.md` file.
 
+Use the adjacent **⋮** button to:
+
+- include or omit the linked conversation outline;
+- include or omit source, export, validation, and per-turn metadata;
+- switch between the expanded and compact export control.
+
+All three preferences are stored by Tampermonkey and persist across browser
+sessions. The outline and metadata are enabled by default.
+
 Tampermonkey stores the userscript in the current browser profile. It persists
 across Codex tasks and project restarts; the local server is needed only while
 installing or updating the script.
@@ -89,7 +98,8 @@ The file includes:
 - conversation title and source URL;
 - export timestamp, conversation ID, turn count, and validation fingerprint;
 - stable response/candidate identifiers in HTML comments;
-- `## User` and `## Gemini` role boundaries;
+- a linked turn outline using short previews of user prompts;
+- explicit User and Gemini role boundaries;
 - the original user and Gemini Markdown, including `$...$` and `$$...$$`
   equations, tables, lists, links, and fenced code.
 

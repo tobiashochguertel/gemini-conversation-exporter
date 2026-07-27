@@ -151,11 +151,89 @@ test("renders original Markdown and LaTeX without conversion", () => {
     diagnostics,
   });
 
-  assert.match(markdown, /## User/);
-  assert.match(markdown, /## Gemini/);
+  assert.match(markdown, /^## Conversation outline$/m);
+  assert.match(
+    markdown,
+    /^1\. \[Turn 1 — Why does x\^2 matter\?\]\(#turn-1\)$/m,
+  );
+  assert.match(markdown, /^2\. \[Turn 2 — Show a table\.\]\(#turn-2\)$/m);
+  assert.match(markdown, /^## Turn 1$/m);
+  assert.match(markdown, /^### User$/m);
+  assert.match(markdown, /^### Gemini$/m);
   assert.match(markdown, /\$\$\nx\^2 \\ge 0\n\$\$/);
   assert.match(markdown, /\| A \| B \|/);
   assert.match(markdown, /Validation fingerprint/);
+  assert.match(markdown, /<!-- gemini-export: turn=1/);
+});
+
+test("always renders an enabled outline for a one-turn conversation", () => {
+  const turns = Core.historyToChronologicalTurns([olderTurn]);
+  const diagnostics = Core.validateConversation(turns);
+  const markdown = Core.renderMarkdown({
+    title: "One turn",
+    sourceUrl: "https://gemini.google.com/app/demo",
+    conversationId: "c_demo",
+    exportedAt: "2026-07-27T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.match(markdown, /^## Conversation outline$/m);
+  assert.match(markdown, /^1\. \[Turn 1 — /m);
+  assert.match(markdown, /^## Turn 1$/m);
+});
+
+test("omits export and turn metadata when disabled", () => {
+  const turns = Core.historyToChronologicalTurns([olderTurn]);
+  const diagnostics = Core.validateConversation(turns);
+  const markdown = Core.renderMarkdown({
+    title: "No metadata",
+    sourceUrl: "https://gemini.google.com/app/demo",
+    conversationId: "c_demo",
+    exportedAt: "2026-07-27T00:00:00.000Z",
+    turns,
+    diagnostics,
+    includeMetadata: false,
+  });
+
+  assert.doesNotMatch(markdown, /^> Source:/m);
+  assert.doesNotMatch(markdown, /^> Exported:/m);
+  assert.doesNotMatch(markdown, /^> Conversation:/m);
+  assert.doesNotMatch(markdown, /Validation fingerprint/);
+  assert.doesNotMatch(markdown, /<!-- gemini-export:/);
+  assert.match(markdown, /^## Conversation outline$/m);
+});
+
+test("restores the original role-only structure when outline is disabled", () => {
+  const turns = Core.historyToChronologicalTurns([olderTurn]);
+  const diagnostics = Core.validateConversation(turns);
+  const markdown = Core.renderMarkdown({
+    title: "No outline",
+    sourceUrl: "https://gemini.google.com/app/demo",
+    conversationId: "c_demo",
+    exportedAt: "2026-07-27T00:00:00.000Z",
+    turns,
+    diagnostics,
+    includeOutline: false,
+  });
+
+  assert.doesNotMatch(markdown, /^## Conversation outline$/m);
+  assert.doesNotMatch(markdown, /^## Turn 1$/m);
+  assert.match(markdown, /^## User$/m);
+  assert.match(markdown, /^## Gemini$/m);
+});
+
+test("creates short deterministic outline previews without Markdown markup", () => {
+  assert.equal(
+    Core.turnPreview(
+      "# **Compare** [these results](https://example.com) with `$x^2$`.",
+    ),
+    "Compare these results with x^2.",
+  );
+  assert.equal(
+    Core.turnPreview("A deliberately long prompt with several words", 24),
+    "A deliberately long…",
+  );
 });
 
 test("creates filesystem-safe Markdown filenames", () => {
@@ -208,6 +286,27 @@ test("userscript UI remains compatible with Gemini Trusted Types", () => {
   );
 
   assert.doesNotMatch(userscriptMain, /\.innerHTML\s*=/);
+});
+
+test("userscript provides persistent on-page export preferences", () => {
+  const userscriptMain = fs.readFileSync(
+    path.resolve(__dirname, "../src/userscript-main.js"),
+    "utf8",
+  );
+  const buildScript = fs.readFileSync(
+    path.resolve(__dirname, "../scripts/build.js"),
+    "utf8",
+  );
+
+  assert.match(userscriptMain, /GM_getValue/);
+  assert.match(userscriptMain, /GM_setValue/);
+  assert.match(userscriptMain, /Conversation outline/);
+  assert.match(userscriptMain, /Export metadata/);
+  assert.match(userscriptMain, /Use compact control/);
+  assert.doesNotMatch(userscriptMain, /GM_registerMenuCommand/);
+  assert.doesNotMatch(buildScript, /GM_registerMenuCommand/);
+  assert.match(buildScript, /@grant\s+GM_getValue/);
+  assert.match(buildScript, /@grant\s+GM_setValue/);
 });
 
 test("userscript clones request options into Firefox's page realm", () => {

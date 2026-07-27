@@ -391,6 +391,37 @@
       return String(url).replace(/[()\\]/g, "\\$&");
     }
 
+    function turnPreview(markdown, maxLength = 72) {
+      const plainText = normalizeBlock(markdown)
+        .replace(/<!--[\s\S]*?-->/g, " ")
+        .replace(/```[^\n]*\n?/g, " ")
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/[`*_~#$>|]/g, " ")
+        .replace(/^\s*(?:[-+*]|\d+[.)])\s+/gm, "")
+        .replace(/\s+/g, " ")
+        .replace(/\s+([,.;:!?])/g, "$1")
+        .trim();
+
+      if (plainText.length <= maxLength) {
+        return plainText;
+      }
+
+      const candidate = plainText.slice(0, maxLength + 1);
+      const lastSpace = candidate.lastIndexOf(" ");
+      const clipped =
+        lastSpace >= Math.floor(maxLength * 0.6)
+          ? candidate.slice(0, lastSpace)
+          : plainText.slice(0, maxLength);
+
+      return `${clipped.trimEnd()}…`;
+    }
+
+    function escapeMarkdownLinkText(text) {
+      return String(text).replace(/([\\[\]])/g, "\\$1");
+    }
+
     function renderMarkdown({
       title,
       sourceUrl,
@@ -398,6 +429,8 @@
       exportedAt,
       turns,
       diagnostics,
+      includeMetadata = true,
+      includeOutline = true,
     }) {
       invariant(Array.isArray(turns) && turns.length > 0, "No turns to render.");
 
@@ -405,41 +438,69 @@
         /\n+/g,
         " ",
       );
-      const lines = [
-        `# ${safeTitle}`,
-        "",
-        `> Source: [Google Gemini](${escapeMarkdownLinkDestination(sourceUrl)})`,
-        `> Exported: ${exportedAt}`,
-        `> Conversation: ${conversationId}`,
-        `> Turns: ${turns.length}`,
-        `> Validation fingerprint: \`${diagnostics.fingerprint}\``,
-        "",
-      ];
+      const lines = [`# ${safeTitle}`, ""];
+
+      if (includeMetadata) {
+        lines.push(
+          `> Source: [Google Gemini](${escapeMarkdownLinkDestination(sourceUrl)})`,
+          `> Exported: ${exportedAt}`,
+          `> Conversation: ${conversationId}`,
+          `> Turns: ${turns.length}`,
+          `> Validation fingerprint: \`${diagnostics.fingerprint}\``,
+          "",
+        );
+      }
+
+      if (includeOutline) {
+        lines.push("## Conversation outline", "");
+        turns.forEach((turn, index) => {
+          const number = index + 1;
+          const preview = turnPreview(turn.userMarkdown);
+          const label = preview
+            ? `Turn ${number} — ${preview}`
+            : `Turn ${number}`;
+
+          lines.push(
+            `${number}. [${escapeMarkdownLinkText(label)}](#turn-${number})`,
+          );
+        });
+        lines.push("");
+      }
 
       turns.forEach((turn, index) => {
         if (index > 0) {
           lines.push("---", "");
         }
 
-        const commentParts = [
-          `turn=${index + 1}`,
-          turn.responseId ? `response=${turn.responseId}` : null,
-          turn.candidateId ? `candidate=${turn.candidateId}` : null,
-          turn.timestamp ? `timestamp=${turn.timestamp}` : null,
-        ].filter(Boolean);
+        if (includeMetadata) {
+          const commentParts = [
+            `turn=${index + 1}`,
+            turn.responseId ? `response=${turn.responseId}` : null,
+            turn.candidateId ? `candidate=${turn.candidateId}` : null,
+            turn.timestamp ? `timestamp=${turn.timestamp}` : null,
+          ].filter(Boolean);
 
-        lines.push(
-          `<!-- gemini-export: ${commentParts.join(" ")} -->`,
-          "",
-          "## User",
-          "",
-          normalizeBlock(turn.userMarkdown),
-          "",
-          "## Gemini",
-          "",
-          normalizeBlock(turn.assistantMarkdown),
-          "",
-        );
+          lines.push(
+            `<!-- gemini-export: ${commentParts.join(" ")} -->`,
+            "",
+          );
+        }
+
+        if (includeOutline) {
+          lines.push(`## Turn ${index + 1}`, "", "### User", "");
+        } else {
+          lines.push("## User", "");
+        }
+
+        lines.push(normalizeBlock(turn.userMarkdown), "");
+
+        if (includeOutline) {
+          lines.push("### Gemini", "");
+        } else {
+          lines.push("## Gemini", "");
+        }
+
+        lines.push(normalizeBlock(turn.assistantMarkdown), "");
       });
 
       return `${lines.join("\n").replace(/\n{4,}/g, "\n\n\n").trim()}\n`;
@@ -502,6 +563,7 @@
       parseHistoryPage,
       renderMarkdown,
       safeFilename,
+      turnPreview,
       validateConversation,
     });
   },
