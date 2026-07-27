@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8 - 2026-07-27
+
+- Load the userscript throughout `https://gemini.google.com/*` so Gemini can
+  navigate into a conversation from any same-origin route without requiring a
+  page reload. The export control remains hidden outside conversation routes.
+
 ## 0.1.7 - 2026-07-27
 
 - Load the userscript on the exact `/app` and `/u/<account>/app` new-chat

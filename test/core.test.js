@@ -340,7 +340,7 @@ test("userscript preserves the active account slot for history requests", () => 
   );
 });
 
-test("userscript metadata covers landing and account-scoped app routes", () => {
+test("userscript metadata covers the Gemini origin and app routes", () => {
   const buildScript = fs.readFileSync(
     path.resolve(__dirname, "../scripts/build.js"),
     "utf8",
@@ -349,6 +349,7 @@ test("userscript metadata covers landing and account-scoped app routes", () => {
   assert.deepEqual(
     Array.from(buildScript.matchAll(/^\/\/ @match\s+(.+)$/gm), (match) => match[1]),
     [
+      "https://gemini.google.com/*",
       "https://gemini.google.com/app",
       "https://gemini.google.com/app/*",
       "https://gemini.google.com/u/*/app",

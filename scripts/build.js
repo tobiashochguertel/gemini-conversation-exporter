@@ -23,6 +23,7 @@ const metadata = `// ==UserScript==
 // @license      MIT
 // @homepageURL  https://github.com/dikelps/gemini-conversation-exporter
 // @supportURL   https://github.com/dikelps/gemini-conversation-exporter/issues
+// @match        https://gemini.google.com/*
 // @match        https://gemini.google.com/app
 // @match        https://gemini.google.com/app/*
 // @match        https://gemini.google.com/u/*/app
