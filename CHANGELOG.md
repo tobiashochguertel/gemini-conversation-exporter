@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 - 2026-07-27
+
+- Load the userscript on the exact `/app` and `/u/<account>/app` new-chat
+  landing routes so its existing SPA route watcher can reveal the export
+  control after a prompt is sent or a conversation is selected.
+
 ## 0.1.6 - 2026-07-27
 
 - Render turn headings as their literal stable anchors (`## turn-1`, `## turn-2`,

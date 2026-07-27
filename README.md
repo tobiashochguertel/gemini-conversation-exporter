@@ -9,11 +9,12 @@ preserves Gemini's original Markdown and LaTeX source.
 
 ## Privacy
 
-The userscript runs only on Gemini conversation pages:
-`https://gemini.google.com/app/*` and
-`https://gemini.google.com/u/*/app/*`. It makes no third-party requests and
-does not collect analytics. Conversation data stays between the signed-in
-Gemini page and the Markdown file downloaded by the browser.
+The userscript runs only on Gemini app routes: `/app`, `/app/*`,
+`/u/<account>/app`, and `/u/<account>/app/*`. It remains hidden on the new-chat
+landing page and appears after a conversation is opened. It makes no
+third-party requests and does not collect analytics. Conversation data stays
+between the signed-in Gemini page and the Markdown file downloaded by the
+browser.
 
 ## Reliability behavior
 

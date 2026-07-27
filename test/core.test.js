@@ -340,15 +340,20 @@ test("userscript preserves the active account slot for history requests", () => 
   );
 });
 
-test("userscript metadata supports account routes and Firefox CSP", () => {
+test("userscript metadata covers landing and account-scoped app routes", () => {
   const buildScript = fs.readFileSync(
     path.resolve(__dirname, "../scripts/build.js"),
     "utf8",
   );
 
-  assert.match(
-    buildScript,
-    /@match\s+https:\/\/gemini\.google\.com\/u\/\*\/app\/\*/,
+  assert.deepEqual(
+    Array.from(buildScript.matchAll(/^\/\/ @match\s+(.+)$/gm), (match) => match[1]),
+    [
+      "https://gemini.google.com/app",
+      "https://gemini.google.com/app/*",
+      "https://gemini.google.com/u/*/app",
+      "https://gemini.google.com/u/*/app/*",
+    ],
   );
   assert.match(buildScript, /@sandbox\s+JavaScript/);
 });

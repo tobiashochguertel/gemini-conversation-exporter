@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         Gemini Conversation Exporter
 // @namespace    local.gemini-web-exporter
-// @version      0.1.6
+// @version      0.1.7
 // @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
 // @author       dikelps
 // @license      MIT
 // @homepageURL  https://github.com/dikelps/gemini-conversation-exporter
 // @supportURL   https://github.com/dikelps/gemini-conversation-exporter/issues
+// @match        https://gemini.google.com/app
 // @match        https://gemini.google.com/app/*
+// @match        https://gemini.google.com/u/*/app
 // @match        https://gemini.google.com/u/*/app/*
 // @run-at       document-idle
 // @grant        unsafeWindow
