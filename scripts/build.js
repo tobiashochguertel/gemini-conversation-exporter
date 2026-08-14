@@ -2,6 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const UserscriptMetadata = require("../src/userscript-metadata");
 
 const projectRoot = path.resolve(__dirname, "..");
 const packagePath = path.join(projectRoot, "package.json");
@@ -15,43 +16,9 @@ const outputPath = path.join(
 );
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 
-// Derive userscript metadata from package.json fields.
-const us = packageJson.userscript;
-const repoUrl = packageJson.repository.url.replace(/\.git$/, "");
-const rawUrl = `${repoUrl.replace("github.com", "raw.githubusercontent.com")}/main/dist/gemini-conversation-exporter.user.js`;
-
-const metadataLines = [
-  "// ==UserScript==",
-  `// @name         ${us.name}`,
-  `// @namespace    ${us.namespace}`,
-  `// @version      ${packageJson.version}`,
-  `// @description  ${us.description}`,
-  `// @author       ${packageJson.author}`,
-];
-for (const contributor of packageJson.contributors || []) {
-  metadataLines.push(`// @contributor  ${contributor}`);
-}
-metadataLines.push(
-  `// @license      ${packageJson.license}`,
-  `// @homepageURL  ${packageJson.homepage}`,
-  `// @supportURL   ${packageJson.bugs.url}`,
-  `// @downloadURL  ${rawUrl}`,
-  `// @updateURL    ${rawUrl}`,
-);
-for (const match of us.match) {
-  metadataLines.push(`// @match        ${match}`);
-}
-metadataLines.push(`// @run-at       ${us["run-at"]}`);
-for (const grant of us.grant) {
-  metadataLines.push(`// @grant        ${grant}`);
-}
-metadataLines.push(`// @sandbox      ${us.sandbox}`);
-if (us.noframes) {
-  metadataLines.push("// @noframes");
-}
-metadataLines.push("// ==/UserScript==");
-
-const metadata = metadataLines.join("\n") + "\n";
+const metadata = UserscriptMetadata.build(packageJson, {
+  distPath: "dist/gemini-conversation-exporter.user.js",
+});
 
 const preferenceStoragePath = path.join(projectRoot, "src", "preference-storage.js");
 const utilsPath = path.join(projectRoot, "src", "utils.js");
