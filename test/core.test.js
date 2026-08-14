@@ -444,6 +444,43 @@ test("renderJson includes thinking, model, and citations in output", () => {
   assert.equal(data.turns[0].webCitations[0].sourceId, "spp_1");
 });
 
+test("renderJson includes sourceIndex for debuggability", () => {
+  const raw1 = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "First",
+    assistant: "Response 1",
+    seconds: 1_700_000_000,
+  });
+  const raw2 = makeRawTurn({
+    responseId: "r_2",
+    parentResponseId: "r_1",
+    candidateId: "rc_2",
+    parentCandidateId: "rc_1",
+    user: "Second",
+    assistant: "Response 2",
+    seconds: 1_700_000_001,
+  });
+  // Raw order is newest-first: [raw2, raw1]
+  // sourceIndex is the position in the raw array: raw2=0, raw1=1
+  // After chronological reversal: turn 1 = raw1 (sourceIndex=1), turn 2 = raw2 (sourceIndex=0)
+  const turns = Core.historyToChronologicalTurns([raw2, raw1]);
+  const diagnostics = Core.validateConversation(turns);
+  const json = Core.renderJson({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+  const data = JSON.parse(json);
+  assert.equal(data.turns[0].index, 1);
+  assert.equal(data.turns[0].sourceIndex, 1);
+  assert.equal(data.turns[1].index, 2);
+  assert.equal(data.turns[1].sourceIndex, 0);
+});
+
 test("renderJson omits thinking/model/citations when absent", () => {
   const raw = makeRawTurn({
     responseId: "r_1",
@@ -579,6 +616,7 @@ test("renderMarkdown includes parentResponseId and parentCandidateId in metadata
 
   assert.match(md, /parentResponse=r_seed/);
   assert.match(md, /parentCandidate=rc_seed/);
+  assert.match(md, /sourceIndex=\d+/);
 });
 
 test("renderMarkdown includes extensions in a collapsible details block", () => {

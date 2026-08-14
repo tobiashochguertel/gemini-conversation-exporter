@@ -656,6 +656,7 @@
         if (includeMetadata) {
           const commentParts = [
             `turn=${index + 1}`,
+            `sourceIndex=${turn.sourceIndex}`,
             turn.responseId ? `response=${turn.responseId}` : null,
             turn.parentResponseId
               ? `parentResponse=${turn.parentResponseId}`
@@ -792,6 +793,7 @@
         title: String(title || "Gemini conversation"),
         turns: turns.map((turn, index) => ({
           index: index + 1,
+          sourceIndex: turn.sourceIndex,
           userMarkdown: turn.userMarkdown,
           assistantMarkdown: turn.assistantMarkdown,
           ...(turn.responseId ? { responseId: turn.responseId } : {}),
