@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 - 2026-08-14
+
+Version 0.3.0 (minor release).
+
+
+
 ## 0.2.1 - 2026-08-14
 
 - Fix menu button toggle — inverted logic (`!panel.hidden` → `panel.hidden`)
