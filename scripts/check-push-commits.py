@@ -32,12 +32,15 @@ ALLOWED_TYPES = (
 
 # Pattern: <type>(<optional scope>): <description>
 # Also allows fixup!/squash!/amend! prefixes (auto-squash commits)
+# re.IGNORECASE per CC spec rule 15: types MUST NOT be treated as case-sensitive
+# (BREAKING CHANGE is the only case-sensitive token, and it's in the footer, not the subject)
 CONVENTIONAL_RE = re.compile(
     r"^(?:fixup! |squash! |amend! )?"
     rf"(?:{'|'.join(ALLOWED_TYPES)})"  # type
     r"(?:\([^)]+\))?"                  # optional scope
     r"!?"                              # optional breaking-change marker
-    r": .+"                            # colon + description
+    r": .+",                           # colon + description
+    re.IGNORECASE,
 )
 
 ZERO_SHA_RE = re.compile(r"^0+$")
