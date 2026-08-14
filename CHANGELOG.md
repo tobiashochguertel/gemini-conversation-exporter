@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.7 - 2026-08-14
+
+## Fixed
+
+- Resolved an issue in Firefox where ZIP bundle export failed due to Xray sandbox restrictions on `TextEncoder`.
+
 ## 0.7.6 - 2026-08-14
 
 ## Fixed
