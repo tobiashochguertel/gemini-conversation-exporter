@@ -46,4 +46,44 @@ const PreferenceStorage = Object.freeze({
       console.warn("[PreferenceStorage] Could not save preference", key, error);
     }
   },
+
+  /**
+   * Read a string preference from Tampermonkey storage.
+   *
+   * @param {string} key - The preference key.
+   * @param {string} fallback - Value returned if GM_getValue is unavailable
+   *   or the stored value is not a string.
+   * @returns {string}
+   */
+  readString(key, fallback) {
+    if (typeof GM_getValue !== "function") {
+      return fallback;
+    }
+
+    try {
+      const value = GM_getValue(key, fallback);
+      return typeof value === "string" ? value : fallback;
+    } catch (error) {
+      console.warn("[PreferenceStorage] Could not read preference", key, error);
+      return fallback;
+    }
+  },
+
+  /**
+   * Write a string preference to Tampermonkey storage.
+   *
+   * @param {string} key - The preference key.
+   * @param {string} value - The value to store.
+   */
+  writeString(key, value) {
+    if (typeof GM_setValue !== "function") {
+      return;
+    }
+
+    try {
+      GM_setValue(key, String(value));
+    } catch (error) {
+      console.warn("[PreferenceStorage] Could not save preference", key, error);
+    }
+  },
 });

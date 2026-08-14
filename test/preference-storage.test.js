@@ -90,6 +90,45 @@ test("PreferenceStorage is frozen and cannot be modified", () => {
   assert.throws(() => { ps.newMethod = () => {}; }, TypeError);
 });
 
+test("readString returns stored string when GM_getValue is available", () => {
+  const store = { "test.key": "debug" };
+  const ps = loadPreferenceStorage({
+    gmGetValue: (key, fallback) => store[key] ?? fallback,
+  });
+
+  assert.equal(ps.readString("test.key", "info"), "debug");
+  assert.equal(ps.readString("missing.key", "info"), "info");
+});
+
+test("readString returns fallback when GM_getValue is unavailable", () => {
+  const ps = loadPreferenceStorage();
+  assert.equal(ps.readString("any.key", "warn"), "warn");
+});
+
+test("readString returns fallback when stored value is not a string", () => {
+  const ps = loadPreferenceStorage({
+    gmGetValue: () => 42,
+  });
+  assert.equal(ps.readString("test.key", "debug"), "debug");
+});
+
+test("writeString stores string via GM_setValue", () => {
+  const store = {};
+  const ps = loadPreferenceStorage({
+    gmGetValue: (key, fallback) => store[key] ?? fallback,
+    gmSetValue: (key, value) => { store[key] = value; },
+  });
+
+  ps.writeString("log.level", "none");
+  assert.equal(store["log.level"], "none");
+  assert.equal(typeof store["log.level"], "string");
+});
+
+test("writeString is a no-op when GM_setValue is unavailable", () => {
+  const ps = loadPreferenceStorage();
+  assert.doesNotThrow(() => ps.writeString("any.key", "debug"));
+});
+
 test("preference-storage.js does not reference Gemini-specific logic", () => {
   const src = fs.readFileSync(
     path.resolve(__dirname, "../src/preference-storage.js"),

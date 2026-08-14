@@ -4,6 +4,15 @@ const PREFERENCE_KEYS = Object.freeze({
   collapsed: "ui.collapsed",
   includeMetadata: "export.includeMetadata",
   includeOutline: "export.includeOutline",
+  logLevel: "debug.logLevel",
+});
+
+const LOG_LEVELS = Object.freeze({
+  none: 0,
+  error: 1,
+  warn: 2,
+  info: 3,
+  debug: 4,
 });
 
 (function runGeminiExporterUserscript() {
@@ -16,6 +25,38 @@ const PREFERENCE_KEYS = Object.freeze({
 
   const pageWindow =
     typeof unsafeWindow !== "undefined" ? unsafeWindow : globalThis;
+
+  const log = {
+    level: LOG_LEVELS[
+      PreferenceStorage.readString(PREFERENCE_KEYS.logLevel, "debug")
+    ] ?? LOG_LEVELS.debug,
+
+    error(...args) {
+      if (this.level >= LOG_LEVELS.error) console.error("[Gemini Exporter]", ...args);
+    },
+    warn(...args) {
+      if (this.level >= LOG_LEVELS.warn) console.warn("[Gemini Exporter]", ...args);
+    },
+    info(...args) {
+      if (this.level >= LOG_LEVELS.info) console.info("[Gemini Exporter]", ...args);
+    },
+    debug(...args) {
+      if (this.level >= LOG_LEVELS.debug) console.debug("[Gemini Exporter]", ...args);
+    },
+    setLevel(name) {
+      const level = LOG_LEVELS[name];
+      if (level === undefined) {
+        console.warn("[Gemini Exporter] unknown log level:", name);
+        return;
+      }
+      this.level = level;
+      PreferenceStorage.writeString(PREFERENCE_KEYS.logLevel, name);
+      console.info("[Gemini Exporter] log level set to", name);
+    },
+  };
+
+  // Expose for console access: log.setLevel("none"), log.setLevel("debug"), etc.
+  globalThis.GeminiExporter = { log };
 
   function isConversationPage() {
     return Core.conversationIdFromPath(location.pathname) !== null;
@@ -167,11 +208,13 @@ const PREFERENCE_KEYS = Object.freeze({
   shadow.append(stack);
 
   function setPanelOpen(open) {
+    log.debug("setPanelOpen", open);
     optionsPanel.setOpen(open);
     exportControl.setMenuExpanded(open);
   }
 
   function setCollapsed(collapsed, persist = true) {
+    log.debug("setCollapsed", { collapsed, persist });
     preferences.collapsed = collapsed;
     exportControl.setCollapsed(collapsed, { title: "Export Markdown" });
     optionsPanel.setCompactToggleLabel(
@@ -219,7 +262,7 @@ const PREFERENCE_KEYS = Object.freeze({
       const filename = Core.safeFilename(title);
 
       Utils.downloadTextFile(markdown, filename);
-      console.info("[Gemini Exporter] Export complete", {
+      log.info("Export complete", {
         filename,
         pages: history.pages.length,
         ...diagnostics,
@@ -230,7 +273,7 @@ const PREFERENCE_KEYS = Object.freeze({
         }. Validation: ${diagnostics.fingerprint}.`,
       );
     } catch (error) {
-      console.error("[Gemini Exporter] Export failed", error);
+      log.error("Export failed", error);
       toast.show(
         `Export stopped: ${error instanceof Error ? error.message : String(error)}`,
         "error",
@@ -245,11 +288,16 @@ const PREFERENCE_KEYS = Object.freeze({
     }
   }
 
-  exportControl.exportButton.addEventListener("click", exportCurrentConversation);
+  exportControl.exportButton.addEventListener("click", () => {
+    log.debug("export button clicked");
+    exportCurrentConversation();
+  });
   exportControl.menuButton.addEventListener("click", () => {
-    setPanelOpen(!optionsPanel.panel.hidden);
+    log.debug("menu button clicked, panel.hidden =", optionsPanel.panel.hidden);
+    setPanelOpen(optionsPanel.panel.hidden);
   });
   optionsPanel.compactToggle.addEventListener("click", () => {
+    log.debug("compact toggle clicked, collapsed =", preferences.collapsed);
     setCollapsed(!preferences.collapsed);
     setPanelOpen(false);
   });
@@ -257,6 +305,9 @@ const PREFERENCE_KEYS = Object.freeze({
     "pointerdown",
     (event) => {
       if (!event.composedPath().includes(host)) {
+        if (!optionsPanel.panel.hidden) {
+          log.debug("outside pointerdown, closing panel");
+        }
         setPanelOpen(false);
       }
     },
@@ -264,6 +315,7 @@ const PREFERENCE_KEYS = Object.freeze({
   );
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      log.debug("Escape pressed, closing panel");
       setPanelOpen(false);
     }
   });
