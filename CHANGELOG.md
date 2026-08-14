@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 - 2026-08-14
+
+## Added
+
+- Added download strategy support with a new **ZIP bundle** option alongside the default **Link only** mode.
+  - When ZIP bundle is selected, generated files from the conversation are downloaded and packaged alongside the Markdown and JSON exports into a single ZIP archive.
+  - Added a "Generated files" dropdown in the export options menu to select and persist preferred download behavior.
+  - Embedded `fflate` for fast in-browser ZIP compression without external runtime network dependencies.
+  - Implemented collision-safe filename handling and error notes for failed file downloads within the archive.
+
 ## 0.6.0 - 2026-08-14
 
 ## Added

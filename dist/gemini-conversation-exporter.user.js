@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gemini Conversation Exporter
 // @namespace    local.gemini-web-exporter
-// @version      0.6.0
+// @version      0.7.0
 // @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
 // @author       tobiashochguertel
 // @contributor  dikelps <dikelps@users.noreply.github.com> (original author)
