@@ -1,6 +1,6 @@
 {
   "name": "gemini-conversation-exporter",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "private": true,
   "description": "Reliable single-conversation Markdown exporter for Gemini Web",
   "author": "tobiashochguertel",

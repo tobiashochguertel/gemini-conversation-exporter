@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.8 - 2026-08-14
+
+## Fixed
+
+- Switched userscript `@sandbox` mode from `JavaScript` to `raw` (60ee50e). This executes the userscript in the page context, resolving Firefox Xray boundary errors when handling binary data and TypedArrays during ZIP bundle creation and file downloads.
+
 ## 0.7.7 - 2026-08-14
 
 ## Fixed
