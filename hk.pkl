@@ -8,4 +8,11 @@ hooks {
             }
         }
     }
+    ["pre-push"] {
+        steps {
+            ["validate-push-commits"] {
+                check = "uv run --script scripts/check-push-commits.py"
+            }
+        }
+    }
 }
