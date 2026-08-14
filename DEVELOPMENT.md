@@ -16,7 +16,15 @@ as pinned in `mise.toml`.
 ### Committing
 
 Commits must follow [Conventional Commits](https://www.conventionalcommits.org/)
-format — enforced by hk's `commit-msg` hook:
+format — enforced by hk's `commit-msg` hook.
+
+**Interactive commit wizard** (recommended):
+
+```powershell
+npm run commit       # interactive prompt for type, scope, subject, body
+```
+
+**Manual commits:**
 
 ```
 feat: add dark mode toggle

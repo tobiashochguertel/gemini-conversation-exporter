@@ -4,7 +4,9 @@
   "private": true,
   "description": "Reliable single-conversation Markdown exporter for Gemini Web",
   "author": "tobiashochguertel",
-  "contributors": ["dikelps <dikelps@users.noreply.github.com> (original author)"],
+  "contributors": [
+    "dikelps <dikelps@users.noreply.github.com> (original author)"
+  ],
   "license": "MIT",
   "homepage": "https://github.com/tobiashochguertel/gemini-conversation-exporter",
   "repository": {
@@ -21,7 +23,13 @@
     "build": "node scripts/build.js",
     "test": "node --test",
     "check": "npm test && npm run build",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "commit": "cz"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
   },
   "userscript": {
     "name": "Gemini Conversation Exporter",
@@ -34,9 +42,17 @@
       "https://gemini.google.com/u/*/app",
       "https://gemini.google.com/u/*/app/*"
     ],
-    "grant": ["unsafeWindow", "GM_getValue", "GM_setValue"],
+    "grant": [
+      "unsafeWindow",
+      "GM_getValue",
+      "GM_setValue"
+    ],
     "run-at": "document-idle",
     "sandbox": "JavaScript",
     "noframes": true
+  },
+  "devDependencies": {
+    "commitizen": "^4.3.2",
+    "cz-conventional-changelog": "^3.3.0"
   }
 }
