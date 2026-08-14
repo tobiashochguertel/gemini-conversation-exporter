@@ -86,6 +86,48 @@ const Ui = Object.freeze({
   },
 
   /**
+   * Create a select dropdown option.
+   *
+   * @param {object} opts
+   * @param {string} opts.label - Option label text.
+   * @param {string} opts.description - Option description text.
+   * @param {string} opts.value - Currently selected value.
+   * @param {Array<{value: string, label: string}>} opts.choices - Select options.
+   * @param {(value: string) => void} opts.onChange - Change callback.
+   * @returns {{ option: HTMLElement, select: HTMLSelectElement }}
+   */
+  createSelectOption({ label, description, value, choices, onChange }) {
+    const option = document.createElement("label");
+    option.className = "option";
+
+    const copy = document.createElement("span");
+    copy.className = "option-copy";
+
+    const optionLabel = document.createElement("span");
+    optionLabel.className = "option-label";
+    optionLabel.textContent = label;
+
+    const optionDescription = document.createElement("span");
+    optionDescription.className = "option-description";
+    optionDescription.textContent = description;
+
+    const select = document.createElement("select");
+    select.className = "option-select";
+    for (const choice of choices) {
+      const opt = document.createElement("option");
+      opt.value = choice.value;
+      opt.textContent = choice.label;
+      if (choice.value === value) opt.selected = true;
+      select.append(opt);
+    }
+    select.addEventListener("change", () => onChange(select.value));
+
+    copy.append(optionLabel, optionDescription);
+    option.append(select, copy);
+    return { option, select };
+  },
+
+  /**
    * Create an export control bar with one or more export buttons and a
    * menu button.
    *

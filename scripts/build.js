@@ -16,7 +16,11 @@ const distPath = `dist/${outputName}`;
 const metadata = UserscriptMetadata.build(packageJson, { distPath });
 
 // Module concatenation order: metadata → core → preference-storage →
-// logger → utils → history-fetcher → ui → userscript-main.
+// logger → utils → history-fetcher → ui → download-strategies →
+// fflate (UMD) → userscript-main.
+const fflatePath = path.join(projectRoot, "node_modules", "fflate", "umd", "index.js");
+const fflateCode = fs.readFileSync(fflatePath, "utf8").trim();
+
 const modules = [
   metadata,
   readSrc("core.js"),
@@ -25,6 +29,8 @@ const modules = [
   readSrc("utils.js"),
   readSrc("history-fetcher.js"),
   readSrc("ui.js"),
+  readSrc("download-strategies.js"),
+  fflateCode,
   readSrc("userscript-main.js"),
 ];
 

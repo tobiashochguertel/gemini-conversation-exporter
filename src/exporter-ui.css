@@ -139,6 +139,25 @@ button:disabled {
   accent-color: #a8c7fa;
 }
 
+.option-select {
+  width: 100%;
+  margin-bottom: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  background: #2a2a2a;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 6px;
+  cursor: pointer;
+  accent-color: #a8c7fa;
+}
+
+.option-select:focus-visible {
+  outline: 3px solid #a8c7fa;
+  outline-offset: -3px;
+}
+
 .option-copy {
   display: flex;
   min-width: 0;

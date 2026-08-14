@@ -4,6 +4,7 @@ const PREFERENCE_KEYS = Object.freeze({
   collapsed: "ui.collapsed",
   includeMetadata: "export.includeMetadata",
   includeOutline: "export.includeOutline",
+  downloadStrategy: "export.downloadStrategy",
   logLevel: "debug.logLevel",
 });
 
@@ -140,6 +141,10 @@ const PREFERENCE_KEYS = Object.freeze({
       PREFERENCE_KEYS.includeOutline,
       true,
     ),
+    downloadStrategy: PreferenceStorage.readString(
+      PREFERENCE_KEYS.downloadStrategy,
+      "link-only",
+    ),
   };
 
   const { host, shadow } = Ui.createShadowRoot(ROOT_ID, __EXPORTER_UI_CSS__);
@@ -168,6 +173,20 @@ const PREFERENCE_KEYS = Object.freeze({
       },
     ],
   });
+  const strategyOption = Ui.createSelectOption({
+    label: "Generated files",
+    description: "How to handle generated file downloads",
+    value: preferences.downloadStrategy,
+    choices: DownloadStrategies.definitions.map((d) => ({
+      value: d.id,
+      label: d.label,
+    })),
+    onChange(value) {
+      preferences.downloadStrategy = value;
+      PreferenceStorage.writeString(PREFERENCE_KEYS.downloadStrategy, value);
+    },
+  });
+  optionsPanel.panel.append(strategyOption.option);
   const exportControl = Ui.createExportControl({
     buttons: [
       { label: "Export Markdown", ariaLabel: "Export Markdown", icon: "↓" },
@@ -260,10 +279,32 @@ const PREFERENCE_KEYS = Object.freeze({
         filename = Core.safeFilename(title, fmt.extension);
       }
 
-      Utils.downloadTextFile(content, filename);
+      const strategyResult = await DownloadStrategies.execute(
+        preferences.downloadStrategy,
+        {
+          turns,
+          title,
+          conversationId,
+          sourceUrl: location.href,
+          exportedAt,
+          diagnostics,
+          preferences,
+          pageWindow,
+          Core,
+          Utils,
+          fflate: typeof fflate !== "undefined" ? fflate : null,
+        },
+        fmt.id,
+      );
+
+      if (strategyResult.mode === "text") {
+        Utils.downloadTextFile(content, filename);
+      }
+
       log.info(`${fmt.label} complete`, {
-        filename,
+        filename: strategyResult.filename || filename,
         format: fmt.id,
+        strategy: preferences.downloadStrategy,
         pages: history.pages.length,
         ...diagnostics,
       });
