@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 - 2026-08-14
+
+Version 0.3.1 (patch release).
+
 ## 0.3.0 - 2026-08-14
 
 Version 0.3.0 (minor release).
