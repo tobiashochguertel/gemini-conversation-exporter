@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 - 2026-08-14
+
+- Fix menu button toggle — inverted logic (`!panel.hidden` → `panel.hidden`)
+  prevented the options panel from opening.
+- Add configurable log level via Tampermonkey storage. Control from the
+  browser console: `GeminiExporter.log.setLevel("none" | "error" | "warn" |
+  "info" | "debug")`. Level persists across page reloads.
+- Add `PreferenceStorage.readString` / `writeString` for string preferences.
+- Replace all `console.*` calls with level-aware `log.*` methods.
+- Fix `main` branch tracking — now tracks `origin/main` (fork) instead of
+  `upstream/main`.
+
 ## 0.2.0 - 2026-07-27 (fork)
 
 - Fork from [dikelps/gemini-conversation-exporter](https://github.com/dikelps/gemini-conversation-exporter).
