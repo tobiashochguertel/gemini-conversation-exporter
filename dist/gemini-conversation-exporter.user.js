@@ -682,7 +682,13 @@
           const commentParts = [
             `turn=${index + 1}`,
             turn.responseId ? `response=${turn.responseId}` : null,
+            turn.parentResponseId
+              ? `parentResponse=${turn.parentResponseId}`
+              : null,
             turn.candidateId ? `candidate=${turn.candidateId}` : null,
+            turn.parentCandidateId
+              ? `parentCandidate=${turn.parentCandidateId}`
+              : null,
             turn.timestamp ? `timestamp=${turn.timestamp}` : null,
             turn.model ? `model=${turn.model}` : null,
             turn.language ? `lang=${turn.language}` : null,
@@ -742,6 +748,42 @@
             lines.push(`${i + 1}. ${text}${sid}`);
           });
           lines.push("");
+        }
+
+        if (turn.extensions && turn.extensions.length > 0) {
+          if (includeOutline) {
+            lines.push("#### Extensions", "");
+          } else {
+            lines.push("### Extensions", "");
+          }
+
+          lines.push("<details>", "");
+          lines.push(
+            `<summary>Extension/tool results (${turn.extensions.length})</summary>`,
+            "",
+          );
+          lines.push("```json");
+          lines.push(JSON.stringify(turn.extensions, null, 2));
+          lines.push("```", "");
+          lines.push("</details>", "");
+        }
+
+        if (turn.feedback && turn.feedback.length > 0) {
+          if (includeOutline) {
+            lines.push("#### Feedback", "");
+          } else {
+            lines.push("### Feedback", "");
+          }
+
+          lines.push("<details>", "");
+          lines.push(
+            `<summary>Feedback/rating groups (${turn.feedback.length})</summary>`,
+            "",
+          );
+          lines.push("```json");
+          lines.push(JSON.stringify(turn.feedback, null, 2));
+          lines.push("```", "");
+          lines.push("</details>", "");
         }
       });
 

@@ -556,6 +556,110 @@ test("renderMarkdown omits thinking and citations sections when absent", () => {
   assert.ok(!md.includes("Citations"));
 });
 
+test("renderMarkdown includes parentResponseId and parentCandidateId in metadata comment", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    parentResponseId: "r_seed",
+    candidateId: "rc_1",
+    parentCandidateId: "rc_seed",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.match(md, /parentResponse=r_seed/);
+  assert.match(md, /parentCandidate=rc_seed/);
+});
+
+test("renderMarkdown includes extensions in a collapsible details block", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    extensions: [null, [{ type: "search", query: "test" }], null, null, null, null, null, []],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.ok(md.includes("#### Extensions"));
+  assert.ok(md.includes("<details>"));
+  assert.ok(md.includes("<summary>Extension/tool results (2)</summary>"));
+  assert.ok(md.includes("```json"));
+  assert.ok(md.includes('"type": "search"'));
+  assert.ok(md.includes("</details>"));
+});
+
+test("renderMarkdown includes feedback in a collapsible details block", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    feedback: [["thumbs_up"], ["good_response"]],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.ok(md.includes("#### Feedback"));
+  assert.ok(md.includes("<details>"));
+  assert.ok(md.includes("<summary>Feedback/rating groups (2)</summary>"));
+  assert.ok(md.includes("```json"));
+  assert.ok(md.includes('"thumbs_up"'));
+  assert.ok(md.includes("</details>"));
+});
+
+test("renderMarkdown omits extensions and feedback sections when absent", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.ok(!md.includes("Extensions"));
+  assert.ok(!md.includes("Feedback"));
+});
+
 test("extracts conversation IDs from default and account-scoped Gemini URLs", () => {
   assert.equal(Core.conversationIdFromPath("/app/abc123"), "c_abc123");
   assert.equal(Core.conversationIdFromPath("/app/c_abc123"), "c_abc123");
