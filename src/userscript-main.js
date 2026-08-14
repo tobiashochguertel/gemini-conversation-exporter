@@ -253,6 +253,9 @@ const LOG_LEVELS = Object.freeze({
       const history = await Core.collectHistoryPages((cursor) =>
         fetchHistoryPage(conversationId, cursor),
       );
+      // Dump the first raw turn structure at debug level so we can inspect
+      // what fields Gemini returns (e.g. thinking/reasoning data).
+      log.debug("raw turn structure (first turn)", history.rawTurnsNewestFirst[0]);
       const turns = Core.historyToChronologicalTurns(
         history.rawTurnsNewestFirst,
       );
