@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2 - 2026-08-14
+
+## Fixed
+
+- Make select dropdowns in the export options panel span the full panel width so option values display clearly instead of being squeezed by the grid layout.
+
 ## 0.7.1 - 2026-08-14
 
 ## Fixed
