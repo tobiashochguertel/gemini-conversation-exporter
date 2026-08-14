@@ -7,11 +7,13 @@ system_extra = "This is a Tampermonkey userscript that exports Gemini conversati
 context = "Project: gemini-conversation-exporter — a userscript built from modular source files in src/ assembled by scripts/build.js into a single .user.js file."
 
 [defaults]
-#model = "claude-opus-4-8"
-#max_tokens = 16384
+# Use OpenRouter (OpenAI-compatible) with a cheap fast model.
+# OPENROUTER_API_KEY is bridged to OPENAI_API_KEY by scripts/release.js.
+model = "google/gemini-3.7-flash"
+max_tokens = 16384
 repo = "tobiashochguertel/gemini-conversation-exporter"
-#provider = "anthropic"
-#base_url = ""
+provider = "openai"
+base_url = "https://openrouter.ai/api/v1"
 #emoji = true
 #verify_links = true
 #match_style = true

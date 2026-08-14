@@ -20,7 +20,8 @@
   "scripts": {
     "build": "node scripts/build.js",
     "test": "node --test",
-    "check": "npm test && npm run build"
+    "check": "npm test && npm run build",
+    "release": "node scripts/release.js"
   },
   "userscript": {
     "name": "Gemini Conversation Exporter",
