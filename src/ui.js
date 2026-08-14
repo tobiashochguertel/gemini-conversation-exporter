@@ -98,7 +98,7 @@ const Ui = Object.freeze({
    */
   createSelectOption({ label, description, value, choices, onChange }) {
     const option = document.createElement("label");
-    option.className = "option";
+    option.className = "option option--select";
 
     const copy = document.createElement("span");
     copy.className = "option-copy";
