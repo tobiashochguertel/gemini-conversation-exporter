@@ -31,11 +31,65 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ── conventional commit bump detection ───────────────────────────────
+
+/**
+ * Determine the semver bump level from conventional commits since the
+ * last tag. Returns "major", "minor", "patch", or null if no commits.
+ *
+ * Conventional Commits spec:
+ *   BREAKING CHANGE footer or !:  → major
+ *   feat:                          → minor
+ *   fix:, chore:, etc.             → patch
+ */
+function detectBumpFromCommits() {
+  let range;
+  try {
+    const lastTag = run("git describe --tags --abbrev=0");
+    range = `${lastTag}..HEAD`;
+  } catch {
+    // No tags yet — treat all commits as the range.
+    range = "HEAD";
+  }
+
+  const log = run(`git log ${range} --pretty=format:"%s%n%b%n---END---"`);
+
+  const commits = log.split("\n---END---").map((c) => c.trim()).filter(Boolean);
+  if (commits.length === 0) return null;
+
+  let level = "patch";
+  for (const commit of commits) {
+    const [subject, ...bodyLines] = commit.split("\n");
+    const body = bodyLines.join("\n");
+
+    // Breaking change: "feat!:" / "fix!:" or "BREAKING CHANGE:" footer
+    if (/![a-z]*:/.test(subject) || /BREAKING[ -]CHANGE/i.test(body)) {
+      return "major";
+    }
+    // New feature
+    if (/^feat(?:\(.+\))?:/.test(subject)) {
+      level = "minor";
+    }
+  }
+
+  return level;
+}
+
 // ── args ─────────────────────────────────────────────────────────────
 
-const bumpType = process.argv[2];
+let bumpType = process.argv[2];
+
+if (bumpType === "auto" || !bumpType) {
+  const detected = detectBumpFromCommits();
+  if (!detected) {
+    fail("no commits found since last tag — specify bump type explicitly");
+  }
+  console.log(`release: detected bump level "${detected}" from conventional commits`);
+  bumpType = detected;
+}
+
 if (!["patch", "minor", "major"].includes(bumpType)) {
-  fail("usage: npm run release -- <patch|minor|major>");
+  fail("usage: npm run release -- [patch|minor|major|auto]");
 }
 
 // ── pre-flight checks ────────────────────────────────────────────────

@@ -1,0 +1,11 @@
+amends "package://github.com/jdx/hk/releases/download/v1.55.0/hk@1.55.0#/Config.pkl"
+
+hooks {
+    ["commit-msg"] {
+        steps {
+            ["conventional-commit"] {
+                check = "hk util check-conventional-commit {{commit_msg_file}}"
+            }
+        }
+    }
+}
