@@ -140,8 +140,9 @@ button:disabled {
 }
 
 .option-select {
+  grid-column: 1 / -1;
   width: 100%;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 6px;
   background: #2a2a2a;
