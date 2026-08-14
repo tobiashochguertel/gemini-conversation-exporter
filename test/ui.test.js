@@ -23,6 +23,7 @@ function createDomShim() {
       style: {},
       _children: [],
       _listeners: {},
+      _classList: new Set(),
       setAttribute(name, value) { this[`_${name}`] = value; },
       getAttribute(name) { return this[`_${name}`]; },
       append(...children) { this._children.push(...children); },
@@ -38,6 +39,40 @@ function createDomShim() {
       },
       click() { this.dispatchEvent({ type: "click" }); },
       attachShadow() { return makeElement("shadow-root"); },
+      get classList() {
+        return {
+          add: (c) => this._classList.add(c),
+          remove: (c) => this._classList.delete(c),
+          contains: (c) => this._classList.has(c),
+          toggle: (c, force) => {
+            if (force === undefined) return this._classList.has(c)
+              ? (this._classList.delete(c), false)
+              : (this._classList.add(c), true);
+            if (force) this._classList.add(c);
+            else this._classList.delete(c);
+            return force;
+          },
+        };
+      },
+      querySelector(selector) {
+        // Simple class-based selector: ".className"
+        const match = selector.match(/^\.([\w-]+)$/);
+        if (!match) return null;
+        const cls = match[1];
+        return this._children.find((c) =>
+          (c._classList && c._classList.has(cls)) ||
+          (c.className && c.className.split(/\s+/).includes(cls))
+        ) || null;
+      },
+      querySelectorAll(selector) {
+        const match = selector.match(/^\.([\w-]+)$/);
+        if (!match) return [];
+        const cls = match[1];
+        return this._children.filter((c) =>
+          (c._classList && c._classList.has(cls)) ||
+          (c.className && c.className.split(/\s+/).includes(cls))
+        );
+      },
     };
     elements.push(el);
     return el;
@@ -106,30 +141,47 @@ test("createCheckboxOption builds a label with checkbox and description", () => 
 test("createExportControl uses provided labels and icons", () => {
   const Ui = loadUi();
   const result = Ui.createExportControl({
-    buttonLabel: "Download",
-    buttonAriaLabel: "Download file",
+    buttons: [
+      { label: "Download", ariaLabel: "Download file", icon: "⬇" },
+    ],
     menuAriaLabel: "Settings",
-    buttonIcon: "⬇",
     menuIcon: "≡",
   });
 
-  assert.equal(result.exportButton.getAttribute("aria-label"), "Download file");
-  assert.equal(result.exportLabel.textContent, "Download");
-  assert.equal(result.downloadIcon.textContent, "⬇");
+  assert.equal(result.buttons.length, 1);
+  assert.equal(result.buttons[0].getAttribute("aria-label"), "Download file");
+  assert.equal(result.buttons[0].querySelector(".export-label").textContent, "Download");
+  assert.equal(result.buttons[0].querySelector(".download-icon").textContent, "⬇");
   assert.equal(result.menuButton.textContent, "≡");
   assert.equal(result.menuButton.getAttribute("aria-label"), "Settings");
   assert.equal(result.menuButton.getAttribute("aria-haspopup"), "dialog");
 });
 
+test("createExportControl supports multiple buttons", () => {
+  const Ui = loadUi();
+  const result = Ui.createExportControl({
+    buttons: [
+      { label: "Export Markdown", ariaLabel: "Export Markdown", icon: "↓" },
+      { label: "Export JSON", ariaLabel: "Export JSON", icon: "{ }" },
+    ],
+    menuAriaLabel: "Options",
+  });
+
+  assert.equal(result.buttons.length, 2);
+  assert.equal(result.buttons[0].getAttribute("aria-label"), "Export Markdown");
+  assert.equal(result.buttons[1].getAttribute("aria-label"), "Export JSON");
+  assert.ok(result.buttons[1].classList.contains("export-button--secondary"));
+  assert.ok(!result.buttons[0].classList.contains("export-button--secondary"));
+});
+
 test("createExportControl uses default icons when not specified", () => {
   const Ui = loadUi();
   const result = Ui.createExportControl({
-    buttonLabel: "Export",
-    buttonAriaLabel: "Export",
+    buttons: [{ label: "Export", ariaLabel: "Export" }],
     menuAriaLabel: "Menu",
   });
 
-  assert.equal(result.downloadIcon.textContent, "↓");
+  assert.equal(result.buttons[0].querySelector(".download-icon").textContent, "↓");
   assert.equal(result.menuButton.textContent, "⋮");
 });
 
@@ -170,8 +222,7 @@ test("createStack creates a container with class and appended children", () => {
 test("createExportControl setMenuExpanded toggles aria-expanded", () => {
   const Ui = loadUi();
   const { menuButton, setMenuExpanded } = Ui.createExportControl({
-    buttonLabel: "X",
-    buttonAriaLabel: "X",
+    buttons: [{ label: "X", ariaLabel: "X" }],
     menuAriaLabel: "M",
   });
 
@@ -182,42 +233,52 @@ test("createExportControl setMenuExpanded toggles aria-expanded", () => {
   assert.equal(menuButton.getAttribute("aria-expanded"), "false");
 });
 
-test("createExportControl setBusy disables button and swaps icon/label/aria", () => {
+test("createExportControl setBusy disables all buttons and swaps icon/label on target", () => {
   const Ui = loadUi();
-  const { exportButton, downloadIcon, exportLabel, setBusy } = Ui.createExportControl({
-    buttonLabel: "Export",
-    buttonAriaLabel: "Export",
+  const { buttons, setBusy } = Ui.createExportControl({
+    buttons: [
+      { label: "Export Markdown", ariaLabel: "Export Markdown", icon: "↓" },
+      { label: "Export JSON", ariaLabel: "Export JSON", icon: "{ }" },
+    ],
     menuAriaLabel: "Menu",
   });
 
-  setBusy(true, { icon: "…", label: "Working…", ariaLabel: "Working" });
-  assert.equal(exportButton.disabled, true);
-  assert.equal(downloadIcon.textContent, "…");
-  assert.equal(exportLabel.textContent, "Working…");
-  assert.equal(exportButton.getAttribute("aria-label"), "Working");
+  setBusy(true, 0, { icon: "…", label: "Working…", ariaLabel: "Working" });
+  assert.equal(buttons[0].disabled, true);
+  assert.equal(buttons[1].disabled, true);
+  assert.equal(buttons[0].querySelector(".download-icon").textContent, "…");
+  assert.equal(buttons[0].querySelector(".export-label").textContent, "Working…");
+  assert.equal(buttons[0].getAttribute("aria-label"), "Working");
+  // Second button label should be unchanged
+  assert.equal(buttons[1].querySelector(".export-label").textContent, "Export JSON");
 
-  setBusy(false, { icon: "↓", label: "Export", ariaLabel: "Export" });
-  assert.equal(exportButton.disabled, false);
-  assert.equal(downloadIcon.textContent, "↓");
-  assert.equal(exportLabel.textContent, "Export");
-  assert.equal(exportButton.getAttribute("aria-label"), "Export");
+  setBusy(false, 0, { icon: "↓", label: "Export Markdown", ariaLabel: "Export Markdown" });
+  assert.equal(buttons[0].disabled, false);
+  assert.equal(buttons[1].disabled, false);
+  assert.equal(buttons[0].querySelector(".download-icon").textContent, "↓");
+  assert.equal(buttons[0].querySelector(".export-label").textContent, "Export Markdown");
+  assert.equal(buttons[0].getAttribute("aria-label"), "Export Markdown");
 });
 
-test("createExportControl setCollapsed toggles dataset and title", () => {
+test("createExportControl setCollapsed toggles dataset and titles", () => {
   const Ui = loadUi();
-  const { control, exportButton, setCollapsed } = Ui.createExportControl({
-    buttonLabel: "Export",
-    buttonAriaLabel: "Export",
+  const { control, buttons, setCollapsed } = Ui.createExportControl({
+    buttons: [
+      { label: "Export Markdown", ariaLabel: "Export Markdown" },
+      { label: "Export JSON", ariaLabel: "Export JSON" },
+    ],
     menuAriaLabel: "Menu",
   });
 
-  setCollapsed(true, { title: "Export" });
+  setCollapsed(true, { titles: ["Export Markdown", "Export JSON"] });
   assert.equal(control.dataset.collapsed, "true");
-  assert.equal(exportButton.title, "Export");
+  assert.equal(buttons[0].title, "Export Markdown");
+  assert.equal(buttons[1].title, "Export JSON");
 
-  setCollapsed(false, { title: "Export" });
+  setCollapsed(false, { titles: ["Export Markdown", "Export JSON"] });
   assert.equal(control.dataset.collapsed, "false");
-  assert.equal(exportButton.title, "");
+  assert.equal(buttons[0].title, "");
+  assert.equal(buttons[1].title, "");
 });
 
 test("createOptionsPanel setOpen toggles panel.hidden", () => {

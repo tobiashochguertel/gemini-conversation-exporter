@@ -506,6 +506,51 @@
       return `${lines.join("\n").replace(/\n{4,}/g, "\n\n\n").trim()}\n`;
     }
 
+    function renderJson({
+      title,
+      sourceUrl,
+      conversationId,
+      exportedAt,
+      turns,
+      diagnostics,
+      includeMetadata = true,
+    }) {
+      invariant(Array.isArray(turns) && turns.length > 0, "No turns to render.");
+
+      const data = {
+        title: String(title || "Gemini conversation"),
+        turns: turns.map((turn, index) => ({
+          index: index + 1,
+          userMarkdown: turn.userMarkdown,
+          assistantMarkdown: turn.assistantMarkdown,
+          ...(turn.responseId ? { responseId: turn.responseId } : {}),
+          ...(turn.candidateId ? { candidateId: turn.candidateId } : {}),
+          ...(turn.parentResponseId
+            ? { parentResponseId: turn.parentResponseId }
+            : {}),
+          ...(turn.parentCandidateId
+            ? { parentCandidateId: turn.parentCandidateId }
+            : {}),
+          ...(turn.timestamp ? { timestamp: turn.timestamp } : {}),
+        })),
+      };
+
+      if (includeMetadata) {
+        data.sourceUrl = sourceUrl;
+        data.conversationId = conversationId;
+        data.exportedAt = exportedAt;
+        data.turnCount = turns.length;
+        data.validation = {
+          fingerprint: diagnostics.fingerprint,
+          duplicateBodies: diagnostics.duplicateBodies || [],
+          timestampRegressions: diagnostics.timestampRegressions || [],
+          markdownWarnings: diagnostics.markdownWarnings || [],
+        };
+      }
+
+      return `${JSON.stringify(data, null, 2)}\n`;
+    }
+
     function conversationIdFromPath(pathname) {
       const parts = String(pathname).split("/").filter(Boolean);
       const appIndex =
@@ -538,7 +583,7 @@
       return withoutProduct || "Gemini conversation";
     }
 
-    function safeFilename(title) {
+    function safeFilename(title, extension = "md") {
       const cleaned = String(title || "Gemini conversation")
         .normalize("NFKC")
         .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
@@ -547,7 +592,7 @@
         .trim()
         .slice(0, 120);
 
-      return `${cleaned || "Gemini conversation"}.md`;
+      return `${cleaned || "Gemini conversation"}.${extension}`;
     }
 
     return Object.freeze({
@@ -562,6 +607,7 @@
       parseBatchexecuteResponse,
       parseHistoryPage,
       renderMarkdown,
+      renderJson,
       safeFilename,
       turnPreview,
       validateConversation,

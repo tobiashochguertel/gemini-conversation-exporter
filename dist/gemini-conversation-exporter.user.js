@@ -531,6 +531,51 @@
       return `${lines.join("\n").replace(/\n{4,}/g, "\n\n\n").trim()}\n`;
     }
 
+    function renderJson({
+      title,
+      sourceUrl,
+      conversationId,
+      exportedAt,
+      turns,
+      diagnostics,
+      includeMetadata = true,
+    }) {
+      invariant(Array.isArray(turns) && turns.length > 0, "No turns to render.");
+
+      const data = {
+        title: String(title || "Gemini conversation"),
+        turns: turns.map((turn, index) => ({
+          index: index + 1,
+          userMarkdown: turn.userMarkdown,
+          assistantMarkdown: turn.assistantMarkdown,
+          ...(turn.responseId ? { responseId: turn.responseId } : {}),
+          ...(turn.candidateId ? { candidateId: turn.candidateId } : {}),
+          ...(turn.parentResponseId
+            ? { parentResponseId: turn.parentResponseId }
+            : {}),
+          ...(turn.parentCandidateId
+            ? { parentCandidateId: turn.parentCandidateId }
+            : {}),
+          ...(turn.timestamp ? { timestamp: turn.timestamp } : {}),
+        })),
+      };
+
+      if (includeMetadata) {
+        data.sourceUrl = sourceUrl;
+        data.conversationId = conversationId;
+        data.exportedAt = exportedAt;
+        data.turnCount = turns.length;
+        data.validation = {
+          fingerprint: diagnostics.fingerprint,
+          duplicateBodies: diagnostics.duplicateBodies || [],
+          timestampRegressions: diagnostics.timestampRegressions || [],
+          markdownWarnings: diagnostics.markdownWarnings || [],
+        };
+      }
+
+      return `${JSON.stringify(data, null, 2)}\n`;
+    }
+
     function conversationIdFromPath(pathname) {
       const parts = String(pathname).split("/").filter(Boolean);
       const appIndex =
@@ -563,7 +608,7 @@
       return withoutProduct || "Gemini conversation";
     }
 
-    function safeFilename(title) {
+    function safeFilename(title, extension = "md") {
       const cleaned = String(title || "Gemini conversation")
         .normalize("NFKC")
         .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
@@ -572,7 +617,7 @@
         .trim()
         .slice(0, 120);
 
-      return `${cleaned || "Gemini conversation"}.md`;
+      return `${cleaned || "Gemini conversation"}.${extension}`;
     }
 
     return Object.freeze({
@@ -587,6 +632,7 @@
       parseBatchexecuteResponse,
       parseHistoryPage,
       renderMarkdown,
+      renderJson,
       safeFilename,
       turnPreview,
       validateConversation,
@@ -892,46 +938,53 @@ const Ui = Object.freeze({
   },
 
   /**
-   * Create an export control bar with a primary button and menu button.
+   * Create an export control bar with one or more export buttons and a
+   * menu button.
    *
    * Returns state setters that encapsulate DOM manipulation:
    *   - setMenuExpanded(expanded): toggle aria-expanded on the menu button
-   *   - setBusy(busy, { icon, label, ariaLabel }): disable button + swap icon/label
-   *   - setCollapsed(collapsed, { title }): toggle dataset.collapsed + button title
+   *   - setBusy(busy, index, { icon, label, ariaLabel }): disable all
+   *     buttons, swap icon/label on button[index]
+   *   - setCollapsed(collapsed, { titles }): toggle dataset.collapsed +
+   *     button titles (titles is an array matching the buttons order)
    *
    * @param {object} opts
-   * @param {string} opts.buttonLabel - Primary button text.
-   * @param {string} opts.buttonAriaLabel - Primary button aria-label.
+   * @param {Array<{ label: string, ariaLabel: string, icon?: string }>} opts.buttons - Export button configs (left to right).
    * @param {string} opts.menuAriaLabel - Menu button aria-label.
-   * @param {string} [opts.buttonIcon="↓"] - Icon character for the button.
    * @param {string} [opts.menuIcon="⋮"] - Icon character for the menu button.
-   * @returns {{ control, exportButton, menuButton, downloadIcon, exportLabel, setMenuExpanded, setBusy, setCollapsed }}
+   * @returns {{ control, buttons, menuButton, setMenuExpanded, setBusy, setCollapsed }}
    */
   createExportControl({
-    buttonLabel,
-    buttonAriaLabel,
+    buttons: buttonConfigs,
     menuAriaLabel,
-    buttonIcon = "↓",
     menuIcon = "⋮",
   }) {
     const control = document.createElement("div");
     control.className = "control";
 
-    const exportButton = document.createElement("button");
-    exportButton.type = "button";
-    exportButton.className = "export-button";
-    exportButton.setAttribute("aria-label", buttonAriaLabel);
+    const buttons = buttonConfigs.map(({ label, ariaLabel, icon = "↓" }, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "export-button";
+      button.setAttribute("aria-label", ariaLabel);
 
-    const downloadIcon = document.createElement("span");
-    downloadIcon.className = "download-icon";
-    downloadIcon.setAttribute("aria-hidden", "true");
-    downloadIcon.textContent = buttonIcon;
+      const downloadIcon = document.createElement("span");
+      downloadIcon.className = "download-icon";
+      downloadIcon.setAttribute("aria-hidden", "true");
+      downloadIcon.textContent = icon;
 
-    const exportLabel = document.createElement("span");
-    exportLabel.className = "export-label";
-    exportLabel.textContent = buttonLabel;
+      const exportLabel = document.createElement("span");
+      exportLabel.className = "export-label";
+      exportLabel.textContent = label;
 
-    exportButton.append(downloadIcon, exportLabel);
+      button.append(downloadIcon, exportLabel);
+
+      if (index > 0) {
+        button.classList.add("export-button--secondary");
+      }
+
+      return { button, downloadIcon, exportLabel };
+    });
 
     const menuButton = document.createElement("button");
     menuButton.type = "button";
@@ -941,25 +994,39 @@ const Ui = Object.freeze({
     menuButton.setAttribute("aria-haspopup", "dialog");
     menuButton.setAttribute("aria-expanded", "false");
 
-    control.append(exportButton, menuButton);
+    control.append(...buttons.map((b) => b.button), menuButton);
 
     function setMenuExpanded(expanded) {
       menuButton.setAttribute("aria-expanded", String(expanded));
     }
 
-    function setBusy(busy, { icon, label, ariaLabel } = {}) {
-      exportButton.disabled = busy;
-      if (icon !== undefined) downloadIcon.textContent = icon;
-      if (label !== undefined) exportLabel.textContent = label;
-      if (ariaLabel !== undefined) exportButton.setAttribute("aria-label", ariaLabel);
+    function setBusy(busy, index, { icon, label, ariaLabel } = {}) {
+      buttons.forEach((b) => {
+        b.button.disabled = busy;
+      });
+      if (index !== undefined && buttons[index]) {
+        const b = buttons[index];
+        if (icon !== undefined) b.downloadIcon.textContent = icon;
+        if (label !== undefined) b.exportLabel.textContent = label;
+        if (ariaLabel !== undefined) b.button.setAttribute("aria-label", ariaLabel);
+      }
     }
 
-    function setCollapsed(collapsed, { title } = {}) {
+    function setCollapsed(collapsed, { titles } = {}) {
       control.dataset.collapsed = String(collapsed);
-      exportButton.title = collapsed ? (title ?? "") : "";
+      buttons.forEach((b, index) => {
+        b.button.title = collapsed ? (titles?.[index] ?? "") : "";
+      });
     }
 
-    return { control, exportButton, menuButton, downloadIcon, exportLabel, setMenuExpanded, setBusy, setCollapsed };
+    return {
+      control,
+      buttons: buttons.map((b) => b.button),
+      menuButton,
+      setMenuExpanded,
+      setBusy,
+      setCollapsed,
+    };
   },
 
   /**
@@ -1199,7 +1266,7 @@ const LOG_LEVELS = Object.freeze({
     ),
   };
 
-  const { host, shadow } = Ui.createShadowRoot(ROOT_ID, ":host {\r\n  all: initial;\r\n  position: fixed;\r\n  right: 22px;\r\n  bottom: 22px;\r\n  z-index: 2147483647;\r\n  font-family: \"Google Sans\", system-ui, -apple-system, sans-serif;\r\n}\r\n\r\n.stack {\r\n  display: flex;\r\n  flex-direction: column;\r\n  align-items: flex-end;\r\n  gap: 10px;\r\n}\r\n\r\nbutton,\r\ninput {\r\n  font: inherit;\r\n}\r\n\r\nbutton {\r\n  appearance: none;\r\n  border: 0;\r\n  cursor: pointer;\r\n}\r\n\r\n.control {\r\n  display: flex;\r\n  overflow: hidden;\r\n  border: 1px solid rgba(255, 255, 255, 0.22);\r\n  border-radius: 999px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.export-button,\r\n.menu-button {\r\n  display: inline-flex;\r\n  min-height: 42px;\r\n  align-items: center;\r\n  justify-content: center;\r\n  background: transparent;\r\n  color: inherit;\r\n}\r\n\r\n.export-button {\r\n  gap: 8px;\r\n  min-width: 142px;\r\n  padding: 0 16px;\r\n  font-weight: 650;\r\n  white-space: nowrap;\r\n  transition: min-width 120ms ease, padding 120ms ease;\r\n}\r\n\r\n.download-icon {\r\n  font-size: 18px;\r\n  line-height: 1;\r\n}\r\n\r\n.menu-button {\r\n  width: 38px;\r\n  border-left: 1px solid rgba(255, 255, 255, 0.16);\r\n  font-size: 21px;\r\n  line-height: 1;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-button {\r\n  min-width: 42px;\r\n  padding: 0 12px;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-label {\r\n  display: none;\r\n}\r\n\r\n.export-button:hover,\r\n.menu-button:hover {\r\n  background: #303030;\r\n}\r\n\r\nbutton:focus-visible {\r\n  outline: 3px solid #a8c7fa;\r\n  outline-offset: -3px;\r\n}\r\n\r\nbutton:disabled {\r\n  cursor: progress;\r\n  opacity: 0.72;\r\n}\r\n\r\n.panel {\r\n  box-sizing: border-box;\r\n  width: min(270px, calc(100vw - 32px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 14px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  padding: 14px;\r\n  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.34);\r\n}\r\n\r\n.panel[hidden] {\r\n  display: none;\r\n}\r\n\r\n.panel-heading {\r\n  margin: 0 0 10px;\r\n  font-size: 13px;\r\n  font-weight: 700;\r\n  letter-spacing: 0.01em;\r\n}\r\n\r\n.option {\r\n  display: grid;\r\n  grid-template-columns: 20px minmax(0, 1fr);\r\n  gap: 9px;\r\n  align-items: start;\r\n  border-radius: 9px;\r\n  cursor: pointer;\r\n  padding: 8px 6px;\r\n}\r\n\r\n.option:hover {\r\n  background: rgba(255, 255, 255, 0.07);\r\n}\r\n\r\n.option input {\r\n  width: 16px;\r\n  height: 16px;\r\n  margin: 1px 0 0;\r\n  accent-color: #a8c7fa;\r\n}\r\n\r\n.option-copy {\r\n  display: flex;\r\n  min-width: 0;\r\n  flex-direction: column;\r\n  gap: 3px;\r\n}\r\n\r\n.option-label {\r\n  font-size: 13px;\r\n  font-weight: 650;\r\n  line-height: 1.2;\r\n}\r\n\r\n.option-description {\r\n  color: #c7c7c7;\r\n  font-size: 11px;\r\n  font-weight: 450;\r\n  line-height: 1.35;\r\n}\r\n\r\n.compact-toggle {\r\n  width: 100%;\r\n  margin-top: 10px;\r\n  border-top: 1px solid rgba(255, 255, 255, 0.14);\r\n  background: transparent;\r\n  color: #a8c7fa;\r\n  padding: 12px 6px 3px;\r\n  text-align: left;\r\n  font-size: 12px;\r\n  font-weight: 650;\r\n}\r\n\r\n.compact-toggle:hover {\r\n  color: #d3e3fd;\r\n}\r\n\r\n.toast {\r\n  box-sizing: border-box;\r\n  display: none;\r\n  max-width: min(420px, calc(100vw - 44px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 12px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  font: 500 13px/1.45 system-ui, -apple-system, sans-serif;\r\n  padding: 11px 13px;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.toast[data-kind=\"error\"] {\r\n  background: #8c1d18;\r\n}\r\n\r\n@media (max-width: 520px) {\r\n  :host {\r\n    right: 12px;\r\n    bottom: 12px;\r\n  }\r\n}");
+  const { host, shadow } = Ui.createShadowRoot(ROOT_ID, ":host {\r\n  all: initial;\r\n  position: fixed;\r\n  right: 22px;\r\n  bottom: 22px;\r\n  z-index: 2147483647;\r\n  font-family: \"Google Sans\", system-ui, -apple-system, sans-serif;\r\n}\r\n\r\n.stack {\r\n  display: flex;\r\n  flex-direction: column;\r\n  align-items: flex-end;\r\n  gap: 10px;\r\n}\r\n\r\nbutton,\r\ninput {\r\n  font: inherit;\r\n}\r\n\r\nbutton {\r\n  appearance: none;\r\n  border: 0;\r\n  cursor: pointer;\r\n}\r\n\r\n.control {\r\n  display: flex;\r\n  overflow: hidden;\r\n  border: 1px solid rgba(255, 255, 255, 0.22);\r\n  border-radius: 999px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.export-button,\r\n.menu-button {\r\n  display: inline-flex;\r\n  min-height: 42px;\r\n  align-items: center;\r\n  justify-content: center;\r\n  background: transparent;\r\n  color: inherit;\r\n}\r\n\r\n.export-button {\r\n  gap: 8px;\r\n  min-width: 142px;\r\n  padding: 0 16px;\r\n  font-weight: 650;\r\n  white-space: nowrap;\r\n  transition: min-width 120ms ease, padding 120ms ease;\r\n}\r\n\r\n.export-button--secondary {\r\n  border-left: 1px solid rgba(255, 255, 255, 0.16);\r\n  min-width: 120px;\r\n}\r\n\r\n.download-icon {\r\n  font-size: 18px;\r\n  line-height: 1;\r\n}\r\n\r\n.menu-button {\r\n  width: 38px;\r\n  border-left: 1px solid rgba(255, 255, 255, 0.16);\r\n  font-size: 21px;\r\n  line-height: 1;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-button {\r\n  min-width: 42px;\r\n  padding: 0 12px;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-label {\r\n  display: none;\r\n}\r\n\r\n.export-button:hover,\r\n.export-button--secondary:hover,\r\n.menu-button:hover {\r\n  background: #303030;\r\n}\r\n\r\nbutton:focus-visible {\r\n  outline: 3px solid #a8c7fa;\r\n  outline-offset: -3px;\r\n}\r\n\r\nbutton:disabled {\r\n  cursor: progress;\r\n  opacity: 0.72;\r\n}\r\n\r\n.panel {\r\n  box-sizing: border-box;\r\n  width: min(270px, calc(100vw - 32px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 14px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  padding: 14px;\r\n  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.34);\r\n}\r\n\r\n.panel[hidden] {\r\n  display: none;\r\n}\r\n\r\n.panel-heading {\r\n  margin: 0 0 10px;\r\n  font-size: 13px;\r\n  font-weight: 700;\r\n  letter-spacing: 0.01em;\r\n}\r\n\r\n.option {\r\n  display: grid;\r\n  grid-template-columns: 20px minmax(0, 1fr);\r\n  gap: 9px;\r\n  align-items: start;\r\n  border-radius: 9px;\r\n  cursor: pointer;\r\n  padding: 8px 6px;\r\n}\r\n\r\n.option:hover {\r\n  background: rgba(255, 255, 255, 0.07);\r\n}\r\n\r\n.option input {\r\n  width: 16px;\r\n  height: 16px;\r\n  margin: 1px 0 0;\r\n  accent-color: #a8c7fa;\r\n}\r\n\r\n.option-copy {\r\n  display: flex;\r\n  min-width: 0;\r\n  flex-direction: column;\r\n  gap: 3px;\r\n}\r\n\r\n.option-label {\r\n  font-size: 13px;\r\n  font-weight: 650;\r\n  line-height: 1.2;\r\n}\r\n\r\n.option-description {\r\n  color: #c7c7c7;\r\n  font-size: 11px;\r\n  font-weight: 450;\r\n  line-height: 1.35;\r\n}\r\n\r\n.compact-toggle {\r\n  width: 100%;\r\n  margin-top: 10px;\r\n  border-top: 1px solid rgba(255, 255, 255, 0.14);\r\n  background: transparent;\r\n  color: #a8c7fa;\r\n  padding: 12px 6px 3px;\r\n  text-align: left;\r\n  font-size: 12px;\r\n  font-weight: 650;\r\n}\r\n\r\n.compact-toggle:hover {\r\n  color: #d3e3fd;\r\n}\r\n\r\n.toast {\r\n  box-sizing: border-box;\r\n  display: none;\r\n  max-width: min(420px, calc(100vw - 44px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 12px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  font: 500 13px/1.45 system-ui, -apple-system, sans-serif;\r\n  padding: 11px 13px;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.toast[data-kind=\"error\"] {\r\n  background: #8c1d18;\r\n}\r\n\r\n@media (max-width: 520px) {\r\n  :host {\r\n    right: 12px;\r\n    bottom: 12px;\r\n  }\r\n}");
   const toast = Ui.createToast();
   const optionsPanel = Ui.createOptionsPanel({
     heading: "Export options",
@@ -1226,8 +1293,10 @@ const LOG_LEVELS = Object.freeze({
     ],
   });
   const exportControl = Ui.createExportControl({
-    buttonLabel: "Export Markdown",
-    buttonAriaLabel: "Export Markdown",
+    buttons: [
+      { label: "Export Markdown", ariaLabel: "Export Markdown", icon: "↓" },
+      { label: "Export JSON", ariaLabel: "Export JSON", icon: "{ }" },
+    ],
     menuAriaLabel: "Export options",
   });
 
@@ -1243,7 +1312,7 @@ const LOG_LEVELS = Object.freeze({
   function setCollapsed(collapsed, persist = true) {
     log.debug("setCollapsed", { collapsed, persist });
     preferences.collapsed = collapsed;
-    exportControl.setCollapsed(collapsed, { title: "Export Markdown" });
+    exportControl.setCollapsed(collapsed, { titles: ["Export Markdown", "Export JSON"] });
     optionsPanel.setCompactToggleLabel(
       collapsed ? "Use expanded control" : "Use compact control",
     );
@@ -1252,7 +1321,15 @@ const LOG_LEVELS = Object.freeze({
     }
   }
 
-  async function exportCurrentConversation() {
+  const EXPORT_FORMATS = [
+    { id: "markdown", label: "Export Markdown", icon: "↓", extension: "md" },
+    { id: "json", label: "Export JSON", icon: "{ }", extension: "json" },
+  ];
+
+  async function exportCurrentConversation(formatIndex) {
+    const fmt = EXPORT_FORMATS[formatIndex];
+    if (!fmt) return;
+
     const conversationId = Core.conversationIdFromPath(location.pathname);
     if (!conversationId) {
       toast.show("Open a Gemini conversation before exporting.", "error");
@@ -1260,7 +1337,7 @@ const LOG_LEVELS = Object.freeze({
     }
 
     setPanelOpen(false);
-    exportControl.setBusy(true, {
+    exportControl.setBusy(true, formatIndex, {
       icon: "…",
       label: "Exporting…",
       ariaLabel: "Exporting",
@@ -1276,21 +1353,38 @@ const LOG_LEVELS = Object.freeze({
       const diagnostics = Core.validateConversation(turns);
       const title = Core.cleanDocumentTitle(document.title);
       const exportedAt = new Date().toISOString();
-      const markdown = Core.renderMarkdown({
-        title,
-        sourceUrl: location.href,
-        conversationId,
-        exportedAt,
-        turns,
-        diagnostics,
-        includeMetadata: preferences.includeMetadata,
-        includeOutline: preferences.includeOutline,
-      });
-      const filename = Core.safeFilename(title);
 
-      Utils.downloadTextFile(markdown, filename);
-      log.info("Export complete", {
+      let content;
+      let filename;
+      if (fmt.id === "json") {
+        content = Core.renderJson({
+          title,
+          sourceUrl: location.href,
+          conversationId,
+          exportedAt,
+          turns,
+          diagnostics,
+          includeMetadata: preferences.includeMetadata,
+        });
+        filename = Core.safeFilename(title, fmt.extension);
+      } else {
+        content = Core.renderMarkdown({
+          title,
+          sourceUrl: location.href,
+          conversationId,
+          exportedAt,
+          turns,
+          diagnostics,
+          includeMetadata: preferences.includeMetadata,
+          includeOutline: preferences.includeOutline,
+        });
+        filename = Core.safeFilename(title, fmt.extension);
+      }
+
+      Utils.downloadTextFile(content, filename);
+      log.info(`${fmt.label} complete`, {
         filename,
+        format: fmt.id,
         pages: history.pages.length,
         ...diagnostics,
       });
@@ -1307,17 +1401,21 @@ const LOG_LEVELS = Object.freeze({
         15_000,
       );
     } finally {
-      exportControl.setBusy(false, {
-        icon: "↓",
-        label: "Export Markdown",
-        ariaLabel: "Export Markdown",
+      exportControl.setBusy(false, formatIndex, {
+        icon: fmt.icon,
+        label: fmt.label,
+        ariaLabel: fmt.label,
       });
     }
   }
 
-  exportControl.exportButton.addEventListener("click", () => {
-    log.debug("export button clicked");
-    exportCurrentConversation();
+  exportControl.buttons[0].addEventListener("click", () => {
+    log.debug("markdown export button clicked");
+    exportCurrentConversation(0);
+  });
+  exportControl.buttons[1].addEventListener("click", () => {
+    log.debug("json export button clicked");
+    exportCurrentConversation(1);
   });
   exportControl.menuButton.addEventListener("click", () => {
     log.debug("menu button clicked, panel.hidden =", optionsPanel.panel.hidden);

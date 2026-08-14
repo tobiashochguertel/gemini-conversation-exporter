@@ -244,6 +244,66 @@ test("creates filesystem-safe Markdown filenames", () => {
   );
 });
 
+test("creates filesystem-safe filenames with custom extension", () => {
+  assert.equal(
+    Core.safeFilename('Branch: "A/B" <test>', "json"),
+    "Branch- -A-B- -test.json",
+  );
+  assert.equal(
+    Core.safeFilename("My Conversation", "json"),
+    "My Conversation.json",
+  );
+});
+
+test("renderJson produces valid JSON with metadata and turns", () => {
+  const turns = Core.historyToChronologicalTurns([newerTurn, olderTurn]);
+  const diagnostics = Core.validateConversation(turns);
+  const json = Core.renderJson({
+    title: "Demo",
+    sourceUrl: "https://gemini.google.com/app/demo",
+    conversationId: "c_demo",
+    exportedAt: "2026-07-27T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  const data = JSON.parse(json);
+  assert.equal(data.title, "Demo");
+  assert.equal(data.sourceUrl, "https://gemini.google.com/app/demo");
+  assert.equal(data.conversationId, "c_demo");
+  assert.equal(data.exportedAt, "2026-07-27T00:00:00.000Z");
+  assert.equal(data.turnCount, 2);
+  assert.equal(data.turns.length, 2);
+  assert.equal(data.turns[0].index, 1);
+  assert.equal(data.turns[1].index, 2);
+  assert.ok(data.turns[0].userMarkdown.length > 0);
+  assert.ok(data.turns[0].assistantMarkdown.length > 0);
+  assert.ok(data.validation.fingerprint);
+});
+
+test("renderJson omits metadata when disabled", () => {
+  const turns = Core.historyToChronologicalTurns([olderTurn]);
+  const diagnostics = Core.validateConversation(turns);
+  const json = Core.renderJson({
+    title: "No metadata",
+    sourceUrl: "https://gemini.google.com/app/demo",
+    conversationId: "c_demo",
+    exportedAt: "2026-07-27T00:00:00.000Z",
+    turns,
+    diagnostics,
+    includeMetadata: false,
+  });
+
+  const data = JSON.parse(json);
+  assert.equal(data.title, "No metadata");
+  assert.equal(data.turns.length, 1);
+  assert.equal("sourceUrl" in data, false);
+  assert.equal("conversationId" in data, false);
+  assert.equal("exportedAt" in data, false);
+  assert.equal("turnCount" in data, false);
+  assert.equal("validation" in data, false);
+});
+
 test("extracts conversation IDs from default and account-scoped Gemini URLs", () => {
   assert.equal(Core.conversationIdFromPath("/app/abc123"), "c_abc123");
   assert.equal(Core.conversationIdFromPath("/app/c_abc123"), "c_abc123");

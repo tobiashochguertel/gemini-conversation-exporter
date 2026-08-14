@@ -86,46 +86,53 @@ const Ui = Object.freeze({
   },
 
   /**
-   * Create an export control bar with a primary button and menu button.
+   * Create an export control bar with one or more export buttons and a
+   * menu button.
    *
    * Returns state setters that encapsulate DOM manipulation:
    *   - setMenuExpanded(expanded): toggle aria-expanded on the menu button
-   *   - setBusy(busy, { icon, label, ariaLabel }): disable button + swap icon/label
-   *   - setCollapsed(collapsed, { title }): toggle dataset.collapsed + button title
+   *   - setBusy(busy, index, { icon, label, ariaLabel }): disable all
+   *     buttons, swap icon/label on button[index]
+   *   - setCollapsed(collapsed, { titles }): toggle dataset.collapsed +
+   *     button titles (titles is an array matching the buttons order)
    *
    * @param {object} opts
-   * @param {string} opts.buttonLabel - Primary button text.
-   * @param {string} opts.buttonAriaLabel - Primary button aria-label.
+   * @param {Array<{ label: string, ariaLabel: string, icon?: string }>} opts.buttons - Export button configs (left to right).
    * @param {string} opts.menuAriaLabel - Menu button aria-label.
-   * @param {string} [opts.buttonIcon="↓"] - Icon character for the button.
    * @param {string} [opts.menuIcon="⋮"] - Icon character for the menu button.
-   * @returns {{ control, exportButton, menuButton, downloadIcon, exportLabel, setMenuExpanded, setBusy, setCollapsed }}
+   * @returns {{ control, buttons, menuButton, setMenuExpanded, setBusy, setCollapsed }}
    */
   createExportControl({
-    buttonLabel,
-    buttonAriaLabel,
+    buttons: buttonConfigs,
     menuAriaLabel,
-    buttonIcon = "↓",
     menuIcon = "⋮",
   }) {
     const control = document.createElement("div");
     control.className = "control";
 
-    const exportButton = document.createElement("button");
-    exportButton.type = "button";
-    exportButton.className = "export-button";
-    exportButton.setAttribute("aria-label", buttonAriaLabel);
+    const buttons = buttonConfigs.map(({ label, ariaLabel, icon = "↓" }, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "export-button";
+      button.setAttribute("aria-label", ariaLabel);
 
-    const downloadIcon = document.createElement("span");
-    downloadIcon.className = "download-icon";
-    downloadIcon.setAttribute("aria-hidden", "true");
-    downloadIcon.textContent = buttonIcon;
+      const downloadIcon = document.createElement("span");
+      downloadIcon.className = "download-icon";
+      downloadIcon.setAttribute("aria-hidden", "true");
+      downloadIcon.textContent = icon;
 
-    const exportLabel = document.createElement("span");
-    exportLabel.className = "export-label";
-    exportLabel.textContent = buttonLabel;
+      const exportLabel = document.createElement("span");
+      exportLabel.className = "export-label";
+      exportLabel.textContent = label;
 
-    exportButton.append(downloadIcon, exportLabel);
+      button.append(downloadIcon, exportLabel);
+
+      if (index > 0) {
+        button.classList.add("export-button--secondary");
+      }
+
+      return { button, downloadIcon, exportLabel };
+    });
 
     const menuButton = document.createElement("button");
     menuButton.type = "button";
@@ -135,25 +142,39 @@ const Ui = Object.freeze({
     menuButton.setAttribute("aria-haspopup", "dialog");
     menuButton.setAttribute("aria-expanded", "false");
 
-    control.append(exportButton, menuButton);
+    control.append(...buttons.map((b) => b.button), menuButton);
 
     function setMenuExpanded(expanded) {
       menuButton.setAttribute("aria-expanded", String(expanded));
     }
 
-    function setBusy(busy, { icon, label, ariaLabel } = {}) {
-      exportButton.disabled = busy;
-      if (icon !== undefined) downloadIcon.textContent = icon;
-      if (label !== undefined) exportLabel.textContent = label;
-      if (ariaLabel !== undefined) exportButton.setAttribute("aria-label", ariaLabel);
+    function setBusy(busy, index, { icon, label, ariaLabel } = {}) {
+      buttons.forEach((b) => {
+        b.button.disabled = busy;
+      });
+      if (index !== undefined && buttons[index]) {
+        const b = buttons[index];
+        if (icon !== undefined) b.downloadIcon.textContent = icon;
+        if (label !== undefined) b.exportLabel.textContent = label;
+        if (ariaLabel !== undefined) b.button.setAttribute("aria-label", ariaLabel);
+      }
     }
 
-    function setCollapsed(collapsed, { title } = {}) {
+    function setCollapsed(collapsed, { titles } = {}) {
       control.dataset.collapsed = String(collapsed);
-      exportButton.title = collapsed ? (title ?? "") : "";
+      buttons.forEach((b, index) => {
+        b.button.title = collapsed ? (titles?.[index] ?? "") : "";
+      });
     }
 
-    return { control, exportButton, menuButton, downloadIcon, exportLabel, setMenuExpanded, setBusy, setCollapsed };
+    return {
+      control,
+      buttons: buttons.map((b) => b.button),
+      menuButton,
+      setMenuExpanded,
+      setBusy,
+      setCollapsed,
+    };
   },
 
   /**

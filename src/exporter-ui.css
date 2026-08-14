@@ -54,6 +54,11 @@ button {
   transition: min-width 120ms ease, padding 120ms ease;
 }
 
+.export-button--secondary {
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  min-width: 120px;
+}
+
 .download-icon {
   font-size: 18px;
   line-height: 1;
@@ -76,6 +81,7 @@ button {
 }
 
 .export-button:hover,
+.export-button--secondary:hover,
 .menu-button:hover {
   background: #303030;
 }

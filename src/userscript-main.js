@@ -199,8 +199,10 @@ const LOG_LEVELS = Object.freeze({
     ],
   });
   const exportControl = Ui.createExportControl({
-    buttonLabel: "Export Markdown",
-    buttonAriaLabel: "Export Markdown",
+    buttons: [
+      { label: "Export Markdown", ariaLabel: "Export Markdown", icon: "↓" },
+      { label: "Export JSON", ariaLabel: "Export JSON", icon: "{ }" },
+    ],
     menuAriaLabel: "Export options",
   });
 
@@ -216,7 +218,7 @@ const LOG_LEVELS = Object.freeze({
   function setCollapsed(collapsed, persist = true) {
     log.debug("setCollapsed", { collapsed, persist });
     preferences.collapsed = collapsed;
-    exportControl.setCollapsed(collapsed, { title: "Export Markdown" });
+    exportControl.setCollapsed(collapsed, { titles: ["Export Markdown", "Export JSON"] });
     optionsPanel.setCompactToggleLabel(
       collapsed ? "Use expanded control" : "Use compact control",
     );
@@ -225,7 +227,15 @@ const LOG_LEVELS = Object.freeze({
     }
   }
 
-  async function exportCurrentConversation() {
+  const EXPORT_FORMATS = [
+    { id: "markdown", label: "Export Markdown", icon: "↓", extension: "md" },
+    { id: "json", label: "Export JSON", icon: "{ }", extension: "json" },
+  ];
+
+  async function exportCurrentConversation(formatIndex) {
+    const fmt = EXPORT_FORMATS[formatIndex];
+    if (!fmt) return;
+
     const conversationId = Core.conversationIdFromPath(location.pathname);
     if (!conversationId) {
       toast.show("Open a Gemini conversation before exporting.", "error");
@@ -233,7 +243,7 @@ const LOG_LEVELS = Object.freeze({
     }
 
     setPanelOpen(false);
-    exportControl.setBusy(true, {
+    exportControl.setBusy(true, formatIndex, {
       icon: "…",
       label: "Exporting…",
       ariaLabel: "Exporting",
@@ -249,21 +259,38 @@ const LOG_LEVELS = Object.freeze({
       const diagnostics = Core.validateConversation(turns);
       const title = Core.cleanDocumentTitle(document.title);
       const exportedAt = new Date().toISOString();
-      const markdown = Core.renderMarkdown({
-        title,
-        sourceUrl: location.href,
-        conversationId,
-        exportedAt,
-        turns,
-        diagnostics,
-        includeMetadata: preferences.includeMetadata,
-        includeOutline: preferences.includeOutline,
-      });
-      const filename = Core.safeFilename(title);
 
-      Utils.downloadTextFile(markdown, filename);
-      log.info("Export complete", {
+      let content;
+      let filename;
+      if (fmt.id === "json") {
+        content = Core.renderJson({
+          title,
+          sourceUrl: location.href,
+          conversationId,
+          exportedAt,
+          turns,
+          diagnostics,
+          includeMetadata: preferences.includeMetadata,
+        });
+        filename = Core.safeFilename(title, fmt.extension);
+      } else {
+        content = Core.renderMarkdown({
+          title,
+          sourceUrl: location.href,
+          conversationId,
+          exportedAt,
+          turns,
+          diagnostics,
+          includeMetadata: preferences.includeMetadata,
+          includeOutline: preferences.includeOutline,
+        });
+        filename = Core.safeFilename(title, fmt.extension);
+      }
+
+      Utils.downloadTextFile(content, filename);
+      log.info(`${fmt.label} complete`, {
         filename,
+        format: fmt.id,
         pages: history.pages.length,
         ...diagnostics,
       });
@@ -280,17 +307,21 @@ const LOG_LEVELS = Object.freeze({
         15_000,
       );
     } finally {
-      exportControl.setBusy(false, {
-        icon: "↓",
-        label: "Export Markdown",
-        ariaLabel: "Export Markdown",
+      exportControl.setBusy(false, formatIndex, {
+        icon: fmt.icon,
+        label: fmt.label,
+        ariaLabel: fmt.label,
       });
     }
   }
 
-  exportControl.exportButton.addEventListener("click", () => {
-    log.debug("export button clicked");
-    exportCurrentConversation();
+  exportControl.buttons[0].addEventListener("click", () => {
+    log.debug("markdown export button clicked");
+    exportCurrentConversation(0);
+  });
+  exportControl.buttons[1].addEventListener("click", () => {
+    log.debug("json export button clicked");
+    exportCurrentConversation(1);
   });
   exportControl.menuButton.addEventListener("click", () => {
     log.debug("menu button clicked, panel.hidden =", optionsPanel.panel.hidden);
