@@ -131,13 +131,20 @@ run("npm test", { stdio: "inherit" });
 const tag = `v${newVersion}`;
 const date = today();
 
-// Bridge OPENROUTER_API_KEY → OPENAI_API_KEY for communique's OpenAI provider.
-// Always override when OPENROUTER_API_KEY is set, since communique.toml
-// points base_url at OpenRouter — an existing OPENAI_API_KEY (for the real
-// OpenAI API) would cause a 401 against OpenRouter.
+// Read communique.toml to determine the configured provider.
+// Only bridge OPENROUTER_API_KEY → OPENAI_API_KEY when base_url actually
+// points to OpenRouter — this avoids clobbering a real OPENAI_API_KEY
+// when the project uses the OpenAI API directly.
+const communiqueConfigPath = path.join(projectRoot, "communique.toml");
 const env = { ...process.env };
-if (env.OPENROUTER_API_KEY) {
-  env.OPENAI_API_KEY = env.OPENROUTER_API_KEY;
+try {
+  const configText = fs.readFileSync(communiqueConfigPath, "utf8");
+  const baseUrlMatch = configText.match(/base_url\s*=\s*"([^"]+)"/);
+  if (baseUrlMatch && baseUrlMatch[1].includes("openrouter.ai") && env.OPENROUTER_API_KEY) {
+    env.OPENAI_API_KEY = env.OPENROUTER_API_KEY;
+  }
+} catch {
+  // No communique.toml — leave env as-is.
 }
 
 let changelogEntry = "";
@@ -148,7 +155,7 @@ try {
     { cwd: projectRoot, encoding: "utf8", env, stdio: ["pipe", "pipe", "pipe"] },
   ).trim();
 } catch (err) {
-  console.warn("release: communique failed, using fallback changelog");
+  console.warn(`release: communique failed, using fallback changelog ${err}`);
   changelogEntry = `Version ${newVersion} (${bumpType} release).`;
 }
 
