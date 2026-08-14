@@ -132,8 +132,11 @@ const tag = `v${newVersion}`;
 const date = today();
 
 // Bridge OPENROUTER_API_KEY → OPENAI_API_KEY for communique's OpenAI provider.
+// Always override when OPENROUTER_API_KEY is set, since communique.toml
+// points base_url at OpenRouter — an existing OPENAI_API_KEY (for the real
+// OpenAI API) would cause a 401 against OpenRouter.
 const env = { ...process.env };
-if (env.OPENROUTER_API_KEY && !env.OPENAI_API_KEY) {
+if (env.OPENROUTER_API_KEY) {
   env.OPENAI_API_KEY = env.OPENROUTER_API_KEY;
 }
 
