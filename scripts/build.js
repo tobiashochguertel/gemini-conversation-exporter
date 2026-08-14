@@ -27,12 +27,17 @@ const metadataLines = [
   `// @version      ${packageJson.version}`,
   `// @description  ${us.description}`,
   `// @author       ${packageJson.author}`,
+];
+for (const contributor of packageJson.contributors || []) {
+  metadataLines.push(`// @contributor  ${contributor}`);
+}
+metadataLines.push(
   `// @license      ${packageJson.license}`,
   `// @homepageURL  ${packageJson.homepage}`,
   `// @supportURL   ${packageJson.bugs.url}`,
   `// @downloadURL  ${rawUrl}`,
   `// @updateURL    ${rawUrl}`,
-];
+);
 for (const match of us.match) {
   metadataLines.push(`// @match        ${match}`);
 }

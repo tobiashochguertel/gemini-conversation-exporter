@@ -4,6 +4,7 @@
 // @version      0.2.1
 // @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
 // @author       tobiashochguertel
+// @contributor  dikelps <dikelps@users.noreply.github.com> (original author)
 // @license      MIT
 // @homepageURL  https://github.com/tobiashochguertel/gemini-conversation-exporter
 // @supportURL   https://github.com/tobiashochguertel/gemini-conversation-exporter/issues

@@ -4,6 +4,7 @@
   "private": true,
   "description": "Reliable single-conversation Markdown exporter for Gemini Web",
   "author": "tobiashochguertel",
+  "contributors": ["dikelps <dikelps@users.noreply.github.com> (original author)"],
   "license": "MIT",
   "homepage": "https://github.com/tobiashochguertel/gemini-conversation-exporter",
   "repository": {
