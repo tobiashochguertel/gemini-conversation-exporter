@@ -126,7 +126,6 @@ test("buildZipBundle creates a ZIP with markdown, JSON, and generated files", as
       ok: true,
       status: 200,
       statusText: "OK",
-      blob: async () => new Blob([mockFileContent]),
       arrayBuffer: async () => mockFileContent.buffer,
     }),
   };
@@ -183,8 +182,6 @@ test("buildZipBundle handles download failures gracefully", async () => {
       ok: false,
       status: 403,
       statusText: "Forbidden",
-      blob: async () => new Blob([]),
-      arrayBuffer: async () => new ArrayBuffer(0),
     }),
   };
 
@@ -235,7 +232,6 @@ test("buildZipBundle avoids filename collisions", async () => {
       ok: true,
       status: 200,
       statusText: "OK",
-      blob: async () => new Blob([mockContent]),
       arrayBuffer: async () => mockContent.buffer,
     }),
   };

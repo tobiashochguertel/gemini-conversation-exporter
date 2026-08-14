@@ -814,7 +814,7 @@ test("userscript metadata covers the Gemini origin and app routes", () => {
       "https://gemini.google.com/u/*/app/*",
     ],
   );
-  assert.match(built, /@sandbox\s+JavaScript/);
+  assert.match(built, /@sandbox\s+raw/);
   assert.match(built, /@downloadURL\s+https:\/\/raw\.githubusercontent\.com/);
   assert.match(built, /@updateURL\s+https:\/\/raw\.githubusercontent\.com/);
 });

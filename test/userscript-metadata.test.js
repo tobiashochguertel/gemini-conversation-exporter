@@ -28,7 +28,7 @@ const samplePackageJson = {
     ],
     grant: ["unsafeWindow", "GM_getValue", "GM_setValue"],
     "run-at": "document-start",
-    sandbox: "JavaScript",
+    sandbox: "raw",
     noframes: true,
   },
 };
@@ -133,7 +133,7 @@ test("build includes @run-at, @sandbox, and @noframes when configured", () => {
   const parsed = parseMetadata(meta);
 
   assert.equal(parsed["run-at"], "document-start");
-  assert.equal(parsed.sandbox, "JavaScript");
+  assert.equal(parsed.sandbox, "raw");
   assert.ok(meta.includes("// @noframes"));
 });
 

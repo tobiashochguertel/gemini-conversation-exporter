@@ -19,7 +19,7 @@
 // @grant        unsafeWindow
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @sandbox      JavaScript
+// @sandbox      raw
 // @noframes
 // ==/UserScript==
 
@@ -1730,38 +1730,12 @@ const DownloadStrategies = Object.freeze({
   ]),
 
   /**
-   * Encode a string as UTF-8 bytes without using TextEncoder.
-   * On Firefox (JavaScript sandbox), TextEncoder is a page-realm object,
-   * so its returned Uint8Array is in the page realm and cannot be accessed
-   * by fflate (userscript realm) due to Xray restrictions.
+   * Encode a string as UTF-8 bytes.
    * @param {string} str - String to encode.
-   * @returns {Uint8Array} UTF-8 bytes in the userscript realm.
+   * @returns {Uint8Array} UTF-8 bytes.
    */
   strToUtf8Bytes(str) {
-    const bytes = [];
-    for (let i = 0; i < str.length; i++) {
-      const c = str.charCodeAt(i);
-      if (c < 0x80) {
-        bytes.push(c);
-      } else if (c < 0x800) {
-        bytes.push(0xc0 | (c >> 6));
-        bytes.push(0x80 | (c & 0x3f));
-      } else if (c < 0xd800 || c >= 0xe000) {
-        bytes.push(0xe0 | (c >> 12));
-        bytes.push(0x80 | ((c >> 6) & 0x3f));
-        bytes.push(0x80 | (c & 0x3f));
-      } else {
-        // Surrogate pair (U+10000–U+10FFFF)
-        i++;
-        const c2 = str.charCodeAt(i);
-        const cp = 0x10000 + (((c & 0x3ff) << 10) | (c2 & 0x3ff));
-        bytes.push(0xf0 | (cp >> 18));
-        bytes.push(0x80 | ((cp >> 12) & 0x3f));
-        bytes.push(0x80 | ((cp >> 6) & 0x3f));
-        bytes.push(0x80 | (cp & 0x3f));
-      }
-    }
-    return new Uint8Array(bytes);
+    return new TextEncoder().encode(str);
   },
 
   /**
@@ -1798,34 +1772,7 @@ const DownloadStrategies = Object.freeze({
     if (!res.ok) {
       throw new Error(`Download failed: ${res.status} ${res.statusText} for ${url}`);
     }
-    // The fetch response is from the page realm. On Firefox (JavaScript sandbox),
-    // TypedArrays/ArrayBuffers from the page realm cannot be accessed via Xrays.
-    // FileReader.readAsArrayBuffer() also creates the ArrayBuffer in the page
-    // realm, and new Response(blob).arrayBuffer() has the same issue.
-    //
-    // The only safe way to transfer binary data across realms is via a string
-    // (primitives are not Xrayed). We read the blob as a data URL (base64 string),
-    // then decode it in the userscript realm using atob() + Uint8Array.
-    // This is cross-browser compatible (Chrome, Firefox, Edge).
-    // Fall back to arrayBuffer() when FileReader is unavailable (e.g. Node.js).
-    const blob = await res.blob();
-    if (typeof FileReader !== "undefined") {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error("Failed to read downloaded file"));
-        reader.readAsDataURL(blob);
-      });
-      // dataUrl is "data:<mime>;base64,<base64data>"
-      const base64 = dataUrl.split(",")[1];
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes;
-    }
-    const arrayBuffer = await blob.arrayBuffer();
+    const arrayBuffer = await res.arrayBuffer();
     return new Uint8Array(arrayBuffer);
   },
 

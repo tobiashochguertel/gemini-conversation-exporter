@@ -48,7 +48,7 @@
       "GM_setValue"
     ],
     "run-at": "document-idle",
-    "sandbox": "JavaScript",
+    "sandbox": "raw",
     "noframes": true
   },
   "devDependencies": {
