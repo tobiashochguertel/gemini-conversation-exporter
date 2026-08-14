@@ -1,10 +1,15 @@
 # Extra instructions appended to the system prompt.
 # Use this to customize tone, style, or project-specific conventions.
-system_extra = "This is a Tampermonkey userscript that exports Gemini conversations as Markdown. It's a fork of dikelps/gemini-conversation-exporter with modular architecture refactoring."
+system_extra = """
+This is a Tampermonkey userscript that exports Gemini conversations as Markdown.
+It's a fork of `dikelps/gemini-conversation-exporter` with modular architecture refactoring.
+"""
 
 # Extra context included in every user prompt.
 # Useful for project descriptions or recurring context.
-context = "Project: gemini-conversation-exporter — a userscript built from modular source files in src/ assembled by scripts/build.js into a single .user.js file."
+context = """
+Project: gemini-conversation-exporter — a userscript built from modular source files in `src/` assembled by `scripts/build.js` into a single `.user.js` file.
+"""
 
 [defaults]
 # Use OpenRouter (OpenAI-compatible) with a cheap fast model.
