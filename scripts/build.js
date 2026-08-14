@@ -16,11 +16,12 @@ const distPath = `dist/${outputName}`;
 const metadata = UserscriptMetadata.build(packageJson, { distPath });
 
 // Module concatenation order: metadata → core → preference-storage →
-// utils → history-fetcher → ui → userscript-main.
+// logger → utils → history-fetcher → ui → userscript-main.
 const modules = [
   metadata,
   readSrc("core.js"),
   readSrc("preference-storage.js"),
+  readSrc("logger.js"),
   readSrc("utils.js"),
   readSrc("history-fetcher.js"),
   readSrc("ui.js"),

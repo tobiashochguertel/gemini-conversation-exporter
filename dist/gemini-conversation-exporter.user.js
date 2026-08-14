@@ -731,6 +731,90 @@ const PreferenceStorage = Object.freeze({
 });
 
 /**
+ * Generic configurable logger for userscripts.
+ *
+ * Provides leveled logging (none, error, warn, info, debug) with an
+ * optional persistence layer. The logger is not specific to any site —
+ * it accepts a tag prefix and a storage adapter so it can be reused
+ * across different userscripts.
+ *
+ * Usage:
+ *   const log = Logger.create({
+ *     tag: "[My Script]",
+ *     level: "debug",
+ *     storage: PreferenceStorage,  // optional: must expose readString/writeString
+ *     storageKey: "myScript.logLevel",
+ *   });
+ *   log.info("hello");
+ *   log.setLevel("warn");
+ */
+
+const Logger = Object.freeze({
+  /**
+   * Log level name → numeric value mapping.
+   */
+  LEVELS: Object.freeze({
+    none: 0,
+    error: 1,
+    warn: 2,
+    info: 3,
+    debug: 4,
+  }),
+
+  /**
+   * Create a logger instance.
+   *
+   * @param {object} opts
+   * @param {string} opts.tag - Prefix string prepended to every message.
+   * @param {string} [opts.level="debug"] - Initial log level name.
+   * @param {object} [opts.storage] - Optional storage adapter with
+   *   `readString(key, fallback)` and `writeString(key, value)`.
+   * @param {string} [opts.storageKey] - Key for persisting the level
+   *   via the storage adapter. Required if `storage` is provided.
+   * @returns {{ level: number, error: Function, warn: Function, info: Function, debug: Function, setLevel: Function }}
+   */
+  create({ tag, level = "debug", storage, storageKey }) {
+    const levels = Logger.LEVELS;
+    const initialLevel =
+      storage && storageKey
+        ? levels[storage.readString(storageKey, level)] ?? levels[level]
+        : levels[level] ?? levels.debug;
+
+    const instance = {
+      level: initialLevel,
+
+      error(...args) {
+        if (this.level >= levels.error) console.error(tag, ...args);
+      },
+      warn(...args) {
+        if (this.level >= levels.warn) console.warn(tag, ...args);
+      },
+      info(...args) {
+        if (this.level >= levels.info) console.info(tag, ...args);
+      },
+      debug(...args) {
+        if (this.level >= levels.debug) console.debug(tag, ...args);
+      },
+
+      setLevel(name) {
+        const value = levels[name];
+        if (value === undefined) {
+          console.warn(tag, "unknown log level:", name);
+          return;
+        }
+        this.level = value;
+        if (storage && storageKey) {
+          storage.writeString(storageKey, name);
+        }
+        console.info(tag, "log level set to", name);
+      },
+    };
+
+    return instance;
+  },
+});
+
+/**
  * Generic browser and Tampermonkey utility functions.
  *
  * These helpers are not specific to any particular site — they provide
@@ -1101,14 +1185,6 @@ const PREFERENCE_KEYS = Object.freeze({
   logLevel: "debug.logLevel",
 });
 
-const LOG_LEVELS = Object.freeze({
-  none: 0,
-  error: 1,
-  warn: 2,
-  info: 3,
-  debug: 4,
-});
-
 (function runGeminiExporterUserscript() {
   "use strict";
 
@@ -1120,34 +1196,12 @@ const LOG_LEVELS = Object.freeze({
   const pageWindow =
     typeof unsafeWindow !== "undefined" ? unsafeWindow : globalThis;
 
-  const log = {
-    level: LOG_LEVELS[
-      PreferenceStorage.readString(PREFERENCE_KEYS.logLevel, "debug")
-    ] ?? LOG_LEVELS.debug,
-
-    error(...args) {
-      if (this.level >= LOG_LEVELS.error) console.error("[Gemini Exporter]", ...args);
-    },
-    warn(...args) {
-      if (this.level >= LOG_LEVELS.warn) console.warn("[Gemini Exporter]", ...args);
-    },
-    info(...args) {
-      if (this.level >= LOG_LEVELS.info) console.info("[Gemini Exporter]", ...args);
-    },
-    debug(...args) {
-      if (this.level >= LOG_LEVELS.debug) console.debug("[Gemini Exporter]", ...args);
-    },
-    setLevel(name) {
-      const level = LOG_LEVELS[name];
-      if (level === undefined) {
-        console.warn("[Gemini Exporter] unknown log level:", name);
-        return;
-      }
-      this.level = level;
-      PreferenceStorage.writeString(PREFERENCE_KEYS.logLevel, name);
-      console.info("[Gemini Exporter] log level set to", name);
-    },
-  };
+  const log = Logger.create({
+    tag: "[Gemini Exporter]",
+    level: "debug",
+    storage: PreferenceStorage,
+    storageKey: PREFERENCE_KEYS.logLevel,
+  });
 
   // Expose for console access: log.setLevel("none"), log.setLevel("debug"), etc.
   globalThis.GeminiExporter = { log };

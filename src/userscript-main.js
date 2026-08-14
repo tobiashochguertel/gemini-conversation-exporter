@@ -7,14 +7,6 @@ const PREFERENCE_KEYS = Object.freeze({
   logLevel: "debug.logLevel",
 });
 
-const LOG_LEVELS = Object.freeze({
-  none: 0,
-  error: 1,
-  warn: 2,
-  info: 3,
-  debug: 4,
-});
-
 (function runGeminiExporterUserscript() {
   "use strict";
 
@@ -26,34 +18,12 @@ const LOG_LEVELS = Object.freeze({
   const pageWindow =
     typeof unsafeWindow !== "undefined" ? unsafeWindow : globalThis;
 
-  const log = {
-    level: LOG_LEVELS[
-      PreferenceStorage.readString(PREFERENCE_KEYS.logLevel, "debug")
-    ] ?? LOG_LEVELS.debug,
-
-    error(...args) {
-      if (this.level >= LOG_LEVELS.error) console.error("[Gemini Exporter]", ...args);
-    },
-    warn(...args) {
-      if (this.level >= LOG_LEVELS.warn) console.warn("[Gemini Exporter]", ...args);
-    },
-    info(...args) {
-      if (this.level >= LOG_LEVELS.info) console.info("[Gemini Exporter]", ...args);
-    },
-    debug(...args) {
-      if (this.level >= LOG_LEVELS.debug) console.debug("[Gemini Exporter]", ...args);
-    },
-    setLevel(name) {
-      const level = LOG_LEVELS[name];
-      if (level === undefined) {
-        console.warn("[Gemini Exporter] unknown log level:", name);
-        return;
-      }
-      this.level = level;
-      PreferenceStorage.writeString(PREFERENCE_KEYS.logLevel, name);
-      console.info("[Gemini Exporter] log level set to", name);
-    },
-  };
+  const log = Logger.create({
+    tag: "[Gemini Exporter]",
+    level: "debug",
+    storage: PreferenceStorage,
+    storageKey: PREFERENCE_KEYS.logLevel,
+  });
 
   // Expose for console access: log.setLevel("none"), log.setLevel("debug"), etc.
   globalThis.GeminiExporter = { log };
