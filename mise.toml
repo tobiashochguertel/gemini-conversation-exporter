@@ -1,0 +1,4 @@
+[tools]
+hk = "latest"
+communique = "latest"
+node = "22"
