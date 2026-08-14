@@ -73,6 +73,20 @@ const DownloadStrategies = Object.freeze({
     if (!res.ok) {
       throw new Error(`Download failed: ${res.status} ${res.statusText} for ${url}`);
     }
+    // Use blob() + FileReader instead of arrayBuffer() to avoid Firefox
+    // Xray issues: TypedArrays from the page realm cannot be accessed
+    // from the userscript realm. FileReader reads the blob into an
+    // ArrayBuffer in the userscript's own realm.
+    // Fall back to arrayBuffer() when FileReader is unavailable (e.g. Node.js).
+    if (typeof FileReader !== "undefined") {
+      const blob = await res.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(new Uint8Array(reader.result));
+        reader.onerror = () => reject(new Error("Failed to read downloaded file"));
+        reader.readAsArrayBuffer(blob);
+      });
+    }
     const arrayBuffer = await res.arrayBuffer();
     return new Uint8Array(arrayBuffer);
   },
