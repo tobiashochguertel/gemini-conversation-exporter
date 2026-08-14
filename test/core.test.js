@@ -294,8 +294,8 @@ test("userscript provides persistent on-page export preferences", () => {
     path.resolve(__dirname, "../src/userscript-main.js"),
     "utf8",
   );
-  const buildScript = fs.readFileSync(
-    path.resolve(__dirname, "../scripts/build.js"),
+  const built = fs.readFileSync(
+    path.resolve(__dirname, "../dist/gemini-conversation-exporter.user.js"),
     "utf8",
   );
 
@@ -305,10 +305,10 @@ test("userscript provides persistent on-page export preferences", () => {
   assert.match(userscriptMain, /Export metadata/);
   assert.match(userscriptMain, /Use compact control/);
   assert.doesNotMatch(userscriptMain, /GM_registerMenuCommand/);
-  assert.doesNotMatch(buildScript, /GM_registerMenuCommand/);
-  assert.match(buildScript, /@grant\s+GM_getValue/);
-  assert.match(buildScript, /@grant\s+GM_setValue/);
-  assert.match(buildScript, /preference-storage\.js/);
+  assert.doesNotMatch(built, /GM_registerMenuCommand/);
+  assert.match(built, /@grant\s+GM_getValue/);
+  assert.match(built, /@grant\s+GM_setValue/);
+  assert.match(built, /PreferenceStorage/);
 });
 
 test("userscript clones request options into Firefox's page realm", () => {
@@ -345,13 +345,13 @@ test("userscript preserves the active account slot for history requests", () => 
 });
 
 test("userscript metadata covers the Gemini origin and app routes", () => {
-  const buildScript = fs.readFileSync(
-    path.resolve(__dirname, "../scripts/build.js"),
+  const built = fs.readFileSync(
+    path.resolve(__dirname, "../dist/gemini-conversation-exporter.user.js"),
     "utf8",
   );
 
   assert.deepEqual(
-    Array.from(buildScript.matchAll(/^\/\/ @match\s+(.+)$/gm), (match) => match[1]),
+    Array.from(built.matchAll(/^\/\/ @match\s+(.+)$/gm), (match) => match[1]),
     [
       "https://gemini.google.com/*",
       "https://gemini.google.com/app",
@@ -360,7 +360,9 @@ test("userscript metadata covers the Gemini origin and app routes", () => {
       "https://gemini.google.com/u/*/app/*",
     ],
   );
-  assert.match(buildScript, /@sandbox\s+JavaScript/);
+  assert.match(built, /@sandbox\s+JavaScript/);
+  assert.match(built, /@downloadURL\s+https:\/\/raw\.githubusercontent\.com/);
+  assert.match(built, /@updateURL\s+https:\/\/raw\.githubusercontent\.com/);
 });
 
 test("CSS is externalized and referenced via a build-time token", () => {

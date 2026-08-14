@@ -20,5 +20,21 @@
     "build": "node scripts/build.js",
     "test": "node --test",
     "check": "npm test && npm run build"
+  },
+  "userscript": {
+    "name": "Gemini Conversation Exporter",
+    "namespace": "local.gemini-web-exporter",
+    "description": "Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.",
+    "match": [
+      "https://gemini.google.com/*",
+      "https://gemini.google.com/app",
+      "https://gemini.google.com/app/*",
+      "https://gemini.google.com/u/*/app",
+      "https://gemini.google.com/u/*/app/*"
+    ],
+    "grant": ["unsafeWindow", "GM_getValue", "GM_setValue"],
+    "run-at": "document-idle",
+    "sandbox": "JavaScript",
+    "noframes": true
   }
 }

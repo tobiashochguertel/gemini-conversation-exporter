@@ -15,28 +15,38 @@ const outputPath = path.join(
 );
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 
-const metadata = `// ==UserScript==
-// @name         Gemini Conversation Exporter
-// @namespace    local.gemini-web-exporter
-// @version      ${packageJson.version}
-// @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
-// @author       tobiashochguertel
-// @license      MIT
-// @homepageURL  https://github.com/tobiashochguertel/gemini-conversation-exporter
-// @supportURL   https://github.com/tobiashochguertel/gemini-conversation-exporter/issues
-// @match        https://gemini.google.com/*
-// @match        https://gemini.google.com/app
-// @match        https://gemini.google.com/app/*
-// @match        https://gemini.google.com/u/*/app
-// @match        https://gemini.google.com/u/*/app/*
-// @run-at       document-idle
-// @grant        unsafeWindow
-// @grant        GM_getValue
-// @grant        GM_setValue
-// @sandbox      JavaScript
-// @noframes
-// ==/UserScript==
-`;
+// Derive userscript metadata from package.json fields.
+const us = packageJson.userscript;
+const repoUrl = packageJson.repository.url.replace(/\.git$/, "");
+const rawUrl = `${repoUrl.replace("github.com", "raw.githubusercontent.com")}/main/dist/gemini-conversation-exporter.user.js`;
+
+const metadataLines = [
+  "// ==UserScript==",
+  `// @name         ${us.name}`,
+  `// @namespace    ${us.namespace}`,
+  `// @version      ${packageJson.version}`,
+  `// @description  ${us.description}`,
+  `// @author       ${packageJson.author}`,
+  `// @license      ${packageJson.license}`,
+  `// @homepageURL  ${packageJson.homepage}`,
+  `// @supportURL   ${packageJson.bugs.url}`,
+  `// @downloadURL  ${rawUrl}`,
+  `// @updateURL    ${rawUrl}`,
+];
+for (const match of us.match) {
+  metadataLines.push(`// @match        ${match}`);
+}
+metadataLines.push(`// @run-at       ${us["run-at"]}`);
+for (const grant of us.grant) {
+  metadataLines.push(`// @grant        ${grant}`);
+}
+metadataLines.push(`// @sandbox      ${us.sandbox}`);
+if (us.noframes) {
+  metadataLines.push("// @noframes");
+}
+metadataLines.push("// ==/UserScript==");
+
+const metadata = metadataLines.join("\n") + "\n";
 
 const preferenceStoragePath = path.join(projectRoot, "src", "preference-storage.js");
 const utilsPath = path.join(projectRoot, "src", "utils.js");

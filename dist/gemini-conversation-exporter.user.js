@@ -7,6 +7,8 @@
 // @license      MIT
 // @homepageURL  https://github.com/tobiashochguertel/gemini-conversation-exporter
 // @supportURL   https://github.com/tobiashochguertel/gemini-conversation-exporter/issues
+// @downloadURL  https://raw.githubusercontent.com/tobiashochguertel/gemini-conversation-exporter/main/dist/gemini-conversation-exporter.user.js
+// @updateURL    https://raw.githubusercontent.com/tobiashochguertel/gemini-conversation-exporter/main/dist/gemini-conversation-exporter.user.js
 // @match        https://gemini.google.com/*
 // @match        https://gemini.google.com/app
 // @match        https://gemini.google.com/app/*
