@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.5 - 2026-08-14
+
+## Fixed
+
+- Resolved an issue in Firefox where downloading binary files (e.g., images and attachments in ZIP exports) failed due to cross-realm sandbox restrictions on `ArrayBuffer` objects (`7b46dc8`).
+
 ## 0.7.4 - 2026-08-14
 
 ## Fixed
