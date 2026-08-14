@@ -878,6 +878,210 @@ test("built userscript contains inlined CSS without the raw token", () => {
   assert.match(built, /:host/);
 });
 
+// Helper: build a raw extension object with generated files (key '59')
+function makeGeneratedFileExtension(files) {
+  const ext = { "8": [], "33": [null, []] };
+  ext["59"] = [
+    files.map((f) => [
+      f.fileTag,
+      null,
+      [
+        null,
+        f.typeCode ?? 10,
+        f.filename,
+        null,
+        null,
+        f.dataToken ?? "$AXzLiTestToken",
+        null,
+        [f.thumbnailUrl ?? "https://thumb.test", f.downloadUrl ?? "https://download.test", f.uploadUrl ?? "https://upload.test"],
+        null,
+        null,
+        null,
+        f.mimeType ?? "application/octet-stream",
+      ],
+    ]),
+  ];
+  return ext;
+}
+
+test("extractTurn parses generated files from extension key 59", () => {
+  const ext = makeGeneratedFileExtension([
+    {
+      fileTag: "[file-tag: code-generated-file-aaa]",
+      filename: "test.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      downloadUrl: "https://contribution.usercontent.google.com/download?c=abc&filename=test.docx",
+    },
+    {
+      fileTag: "[file-tag: code-generated-file-bbb]",
+      filename: "guide.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      downloadUrl: "https://contribution.usercontent.google.com/download?c=def&filename=guide.docx",
+    },
+  ]);
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Create a doc",
+    assistant: "Here it is",
+    seconds: 1_700_000_000,
+    extensions: [ext, null, null, null, null, null, null, []],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.ok(turns[0].extensions);
+  assert.equal(turns[0].extensions.length, 2);
+  const ext0 = turns[0].extensions[0];
+  assert.equal(ext0.index, 0);
+  assert.ok(ext0.generatedFiles);
+  assert.equal(ext0.generatedFiles.length, 2);
+  assert.equal(ext0.generatedFiles[0].filename, "test.docx");
+  assert.equal(ext0.generatedFiles[0].mimeType, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  assert.equal(ext0.generatedFiles[0].downloadUrl, "https://contribution.usercontent.google.com/download?c=abc&filename=test.docx");
+  assert.equal(ext0.generatedFiles[0].fileTag, "[file-tag: code-generated-file-aaa]");
+  assert.equal(ext0.generatedFiles[0].typeCode, 10);
+  assert.equal(ext0.generatedFiles[1].filename, "guide.docx");
+});
+
+test("extractTurn captures uploaded files from turn[2][0][4]", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Analyze this",
+    assistant: "Done",
+    seconds: 1_700_000_000,
+  });
+  // Override the attachments field
+  raw[2][0][4] = [[{ filename: "upload.png", mime: "image/png" }]];
+
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.ok(turns[0].uploadedFiles);
+  assert.equal(turns[0].uploadedFiles.length, 1);
+  assert.ok(turns[0].uploadedFiles[0].raw);
+});
+
+test("extractTurn returns null uploadedFiles when attachments is empty", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi",
+    seconds: 1_700_000_000,
+  });
+  // Default makeRawTurn sets turn[2][0][4] = "model" string, not array.
+  // Let's set it to [[]] (empty attachments, as observed in real data)
+  raw[2][0][4] = [[]];
+
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.equal(turns[0].uploadedFiles, undefined);
+});
+
+test("renderMarkdown replaces file-tag placeholders with download links", () => {
+  const ext = makeGeneratedFileExtension([
+    {
+      fileTag: "[file-tag: code-generated-file-abc123]",
+      filename: "report.docx",
+      downloadUrl: "https://contribution.usercontent.google.com/download?c=xyz&filename=report.docx",
+    },
+  ]);
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Make a report",
+    assistant: "Done!\n\n[file-tag: code-generated-file-abc123]\n\nHope it helps!",
+    seconds: 1_700_000_000,
+    extensions: [ext, null, null, null, null, null, null, []],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  // The file-tag should be replaced with a download link in the Gemini section.
+  // (It may still appear in the extensions JSON dump.)
+  const geminiSection = md.split("### Gemini")[1]?.split("####")[0];
+  assert.ok(geminiSection);
+  assert.ok(!geminiSection.includes("[file-tag: code-generated-file-abc123]"));
+  assert.ok(md.includes("[report.docx](https://contribution.usercontent.google.com/download"));
+});
+
+test("renderMarkdown includes generated files section", () => {
+  const ext = makeGeneratedFileExtension([
+    {
+      fileTag: "[file-tag: code-generated-file-aaa]",
+      filename: "test.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      downloadUrl: "https://download.test/test.docx",
+    },
+  ]);
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Create a doc",
+    assistant: "Here it is",
+    seconds: 1_700_000_000,
+    extensions: [ext, null, null, null, null, null, null, []],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.ok(md.includes("#### Generated files"));
+  assert.ok(md.includes("[test.docx](https://download.test/test.docx)"));
+  assert.ok(md.includes("`application/vnd.openxmlformats-officedocument.wordprocessingml.document`"));
+});
+
+test("renderJson includes generatedFiles in extensions and uploadedFiles", () => {
+  const ext = makeGeneratedFileExtension([
+    {
+      fileTag: "[file-tag: code-generated-file-aaa]",
+      filename: "test.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      downloadUrl: "https://download.test/test.docx",
+    },
+  ]);
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Create a doc",
+    assistant: "Here it is",
+    seconds: 1_700_000_000,
+    extensions: [ext, null, null, null, null, null, null, []],
+  });
+  raw[2][0][4] = [[{ filename: "upload.png" }]];
+
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const json = Core.renderJson({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+  const data = JSON.parse(json);
+
+  assert.ok(data.turns[0].extensions);
+  assert.ok(data.turns[0].extensions[0].generatedFiles);
+  assert.equal(data.turns[0].extensions[0].generatedFiles[0].filename, "test.docx");
+  assert.equal(data.turns[0].extensions[0].generatedFiles[0].downloadUrl, "https://download.test/test.docx");
+  assert.ok(data.turns[0].uploadedFiles);
+  assert.equal(data.turns[0].uploadedFiles.length, 1);
+});
+
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -49,9 +49,27 @@
      */
 
     /**
+     * @typedef {Object} GeneratedFile
+     * @property {string} fileTag       - File tag identifier (e.g. `[file-tag: code-generated-file-<uuid>]`).
+     * @property {string} filename      - Filename (e.g. `test.docx`).
+     * @property {string|null} mimeType - MIME type (e.g. `application/vnd.openxmlformats...`).
+     * @property {string|null} downloadUrl  - Direct download URL.
+     * @property {string|null} thumbnailUrl - Thumbnail/preview URL.
+     * @property {string|null} uploadUrl    - Upload URL.
+     * @property {string|null} dataToken    - Opaque data token (base64-like).
+     * @property {number|null} typeCode     - Numeric type code (e.g. 10).
+     */
+
+    /**
+     * @typedef {Object} UploadedFile
+     * @property {*} raw                - Raw, opaque uploaded-file payload.
+     */
+
+    /**
      * @typedef {Object} ExtensionResult
-     * @property {number} index         - Original position in candidate[12].
-     * @property {*} raw                - Raw, opaque extension/tool payload.
+     * @property {number} index              - Original position in candidate[12].
+     * @property {*} raw                     - Raw, opaque extension/tool payload.
+     * @property {GeneratedFile[]} [generatedFiles] - Parsed generated files from key '59' (if present).
      */
 
     /**
@@ -74,7 +92,8 @@
      * @property {string} [language]             - Response language code (e.g. "DE").
      * @property {Thinking} [thinking]           - Thinking/reasoning data.
      * @property {WebCitation[]} [webCitations]  - Web search citations.
-     * @property {ExtensionResult[]} [extensions]- Extension/tool results.
+     * @property {ExtensionResult[]} [extensions]- Extension/tool results (with parsed generatedFiles).
+     * @property {UploadedFile[]} [uploadedFiles]- User-uploaded files.
      * @property {FeedbackGroup[]} [feedback]    - Feedback/rating groups.
      * @property {number} sourceIndex            - Zero-based index in the raw history.
      */
@@ -318,7 +337,41 @@
     }
 
     /**
+     * Parse generated file entries from extension key '59'.
+     * @param {*} ext59 - The raw value of extension key '59'.
+     * @returns {GeneratedFile[]} Array of generated file objects (empty if none).
+     */
+    function parseGeneratedFiles(ext59) {
+      if (!Array.isArray(ext59) || !Array.isArray(ext59[0])) {
+        return [];
+      }
+
+      return ext59[0]
+        .map((fileEntry) => {
+          if (!Array.isArray(fileEntry)) return null;
+          const fileTag = typeof fileEntry[0] === "string" ? fileEntry[0] : null;
+          const meta = Array.isArray(fileEntry[2]) ? fileEntry[2] : null;
+          if (!meta) return null;
+
+          const urls = Array.isArray(meta[7]) ? meta[7] : [];
+
+          return {
+            fileTag,
+            filename: typeof meta[2] === "string" ? meta[2] : null,
+            mimeType: typeof meta[11] === "string" ? meta[11] : null,
+            downloadUrl: typeof urls[1] === "string" ? urls[1] : null,
+            thumbnailUrl: typeof urls[0] === "string" ? urls[0] : null,
+            uploadUrl: typeof urls[2] === "string" ? urls[2] : null,
+            dataToken: typeof meta[5] === "string" ? meta[5] : null,
+            typeCode: typeof meta[1] === "number" ? meta[1] : null,
+          };
+        })
+        .filter((f) => f !== null);
+    }
+
+    /**
      * Extract extension/tool results from a candidate.
+     * Parses the '59' key into structured generatedFiles when present.
      * @param {Array|null} candidate - The raw candidate array (38 fields).
      * @returns {ExtensionResult[]} Array of extension entries (empty if none).
      */
@@ -331,8 +384,15 @@
       return extensions
         .map((ext, i) => {
           if (ext === null || ext === undefined) return null;
-          // Extension entries are opaque; preserve their raw JSON form.
-          return { index: i, raw: ext };
+          const result = { index: i, raw: ext };
+          // Parse the '59' key into structured generated files when present.
+          if (ext && typeof ext === "object" && Array.isArray(ext["59"])) {
+            const generatedFiles = parseGeneratedFiles(ext["59"]);
+            if (generatedFiles.length > 0) {
+              result.generatedFiles = generatedFiles;
+            }
+          }
+          return result;
         })
         .filter((e) => e !== null);
     }
@@ -354,6 +414,30 @@
           return { index: i, raw: group };
         })
         .filter((g) => g !== null);
+    }
+
+    /**
+     * Extract user-uploaded files from a raw turn's prompt metadata.
+     * @param {Array} rawTurn - The raw turn array.
+     * @returns {UploadedFile[]|null} Array of uploaded file objects, or null.
+     */
+    function extractUploadedFiles(rawTurn) {
+      const attachments = rawTurn?.[2]?.[0]?.[4];
+      if (!Array.isArray(attachments)) {
+        return null;
+      }
+
+      const files = attachments
+        .map((att) => {
+          if (att === null || att === undefined) return null;
+          if (Array.isArray(att) && att.length === 0) return null;
+          // Uploaded file structure is not yet confirmed from observed data.
+          // Preserve the raw payload for future parsing.
+          return { raw: att };
+        })
+        .filter((f) => f !== null);
+
+      return files.length > 0 ? files : null;
     }
 
     /**
@@ -381,6 +465,7 @@
       const webCitations = extractWebCitations(candidate);
       const extensions = extractExtensions(candidate);
       const feedback = extractFeedback(rawTurn);
+      const uploadedFiles = extractUploadedFiles(rawTurn);
 
       return {
         conversationId:
@@ -409,6 +494,7 @@
           : {}),
         ...(webCitations.length > 0 ? { webCitations } : {}),
         ...(extensions.length > 0 ? { extensions } : {}),
+        ...(uploadedFiles ? { uploadedFiles } : {}),
         ...(feedback ? { feedback } : {}),
         sourceIndex,
       };
@@ -580,6 +666,46 @@
         .replace(/^\n+|\n+$/g, "");
     }
 
+    /**
+     * Collect all generated files from a turn's extensions.
+     * @param {Turn} turn - The turn object.
+     * @returns {GeneratedFile[]} Array of generated files (empty if none).
+     */
+    function collectGeneratedFiles(turn) {
+      if (!turn.extensions) return [];
+      return turn.extensions.flatMap((ext) => ext.generatedFiles || []);
+    }
+
+    /**
+     * Replace [file-tag: ...] placeholders in assistant markdown with download links.
+     * @param {string} markdown - The assistant markdown.
+     * @param {GeneratedFile[]} generatedFiles - Generated files to match against.
+     * @returns {string} Markdown with file tags replaced by download links.
+     */
+    function replaceFileTags(markdown, generatedFiles) {
+      if (!generatedFiles.length) return markdown;
+      const fileMap = new Map();
+      for (const file of generatedFiles) {
+        if (file.fileTag) {
+          fileMap.set(file.fileTag, file);
+        }
+      }
+      return markdown.replace(
+        /\[file-tag:\s*code-generated-file-[^\]]+\]/g,
+        (tag) => {
+          const file = fileMap.get(tag);
+          if (file && file.downloadUrl) {
+            const label = file.filename || "Download file";
+            return `[${escapeMarkdownLinkText(label)}](${escapeMarkdownLinkDestination(file.downloadUrl)})`;
+          }
+          if (file && file.filename) {
+            return `*${escapeMarkdownLinkText(file.filename)}*`;
+          }
+          return tag;
+        },
+      );
+    }
+
     function escapeMarkdownLinkDestination(url) {
       return String(url).replace(/[()\\]/g, "\\$&");
     }
@@ -734,7 +860,12 @@
           lines.push("## Gemini", "");
         }
 
-        lines.push(normalizeBlock(turn.assistantMarkdown), "");
+        const generatedFiles = collectGeneratedFiles(turn);
+        const assistantMd = generatedFiles.length
+          ? replaceFileTags(normalizeBlock(turn.assistantMarkdown), generatedFiles)
+          : normalizeBlock(turn.assistantMarkdown);
+
+        lines.push(assistantMd, "");
 
         if (turn.webCitations && turn.webCitations.length > 0) {
           if (includeOutline) {
@@ -749,6 +880,43 @@
             lines.push(`${i + 1}. ${text}${sid}`);
           });
           lines.push("");
+        }
+
+        if (generatedFiles.length > 0) {
+          if (includeOutline) {
+            lines.push("#### Generated files", "");
+          } else {
+            lines.push("### Generated files", "");
+          }
+
+          generatedFiles.forEach((file, i) => {
+            const num = i + 1;
+            const filename = file.filename || `File ${num}`;
+            const link = file.downloadUrl
+              ? `[${escapeMarkdownLinkText(filename)}](${escapeMarkdownLinkDestination(file.downloadUrl)})`
+              : escapeMarkdownLinkText(filename);
+            const mime = file.mimeType ? ` \`${file.mimeType}\`` : "";
+            lines.push(`${num}. ${link}${mime}`);
+          });
+          lines.push("");
+        }
+
+        if (turn.uploadedFiles && turn.uploadedFiles.length > 0) {
+          if (includeOutline) {
+            lines.push("#### Uploaded files", "");
+          } else {
+            lines.push("### Uploaded files", "");
+          }
+
+          lines.push("<details>", "");
+          lines.push(
+            `<summary>Uploaded files (${turn.uploadedFiles.length})</summary>`,
+            "",
+          );
+          lines.push("```json");
+          lines.push(JSON.stringify(turn.uploadedFiles, null, 2));
+          lines.push("```", "");
+          lines.push("</details>", "");
         }
 
         if (turn.extensions && turn.extensions.length > 0) {
@@ -837,6 +1005,7 @@
             ? { webCitations: turn.webCitations }
             : {}),
           ...(turn.extensions ? { extensions: turn.extensions } : {}),
+          ...(turn.uploadedFiles ? { uploadedFiles: turn.uploadedFiles } : {}),
           ...(turn.feedback ? { feedback: turn.feedback } : {}),
         })),
       };

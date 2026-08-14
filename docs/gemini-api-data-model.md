@@ -4,6 +4,10 @@
 > `boq_assistant-bard-web-server_20260813.10_p0`.
 > Gemini's internal API is undocumented and changes frequently. This
 > document describes what was observed at capture time.
+>
+> **Updated:** 2026-08-14 — documented generated file structure
+> (`extension['59']`), file URLs, file tags in assistant markdown,
+> and code execution metadata (`extension['33']`).
 
 ## Endpoint
 
@@ -314,7 +318,7 @@ Each citation (`candidate[2][1][i]`) is a 4-element array:
 ### Thinking structure (`candidate[37]`)
 
 > **This field contains the model's reasoning/thinking data.**
-> It is extracted by the exporter into `thinking.text` and `thinking.steps[]`.
+> It is extracted by the exporter as `turn.thinking`.
 
 ```
 thinking = [
@@ -360,25 +364,197 @@ An array of step objects (11–13 steps observed). Each step is a
 | 5     | string   | Empty string               |
 | 6     | string   | Empty string               |
 
-## Summary of fields the exporter extracts vs. misses
+### Extension/tool results (`candidate[12]`)
 
-| Field                     | Path                          | Extracted? |
-| ------------------------- | ----------------------------- | ---------- |
-| Conversation ID           | `turn[0][0]`                  | ✅         |
-| Response ID               | `turn[0][1]`                  | ✅         |
-| Parent response ID        | `turn[1][1]`                  | ✅         |
-| Parent candidate ID       | `turn[1][2]`                  | ✅         |
-| User prompt               | `turn[2][0][0]`               | ✅         |
-| Candidate ID              | `candidate[0]`                | ✅         |
-| Assistant markdown        | `candidate[1][0]`             | ✅         |
-| Timestamp                 | `turn[4]`                     | ✅         |
-| **Model name**            | `turn[3][21]`                 | ✅         |
-| **Language**              | `turn[3][8]`                  | ✅         |
-| **Thinking text**         | `candidate[37][0][0]`         | ✅         |
-| **Thinking steps**        | `candidate[37][1]`            | ✅         |
-| **Web citations**         | `candidate[2][1]`             | ✅         |
-| **Extension/tool results**| `candidate[12]`               | ✅         |
-| **Feedback/ratings**      | `turn[3][1]`                  | ✅         |
+> **This field contains tool/extension results, including generated
+> files.** It is extracted by the exporter as `turn.extensions` with
+> parsed `generatedFiles` when the `'59'` key is present.
+
+`candidate[12]` is an array of 8 extension slots (most are `null`).
+Each non-null slot is an object keyed by numeric string IDs. The key
+`'59'` contains **generated files** (e.g. Word documents, images,
+code-generated artifacts).
+
+```
+candidate[12] = [
+  { '8': [], '33': [...], '59': [[fileEntry, ...]] },  // [0] — generated files
+  null, null, null, null, null, null, null, []          // [1-7] — other slots
+]
+```
+
+#### Extension object keys
+
+| Key  | Type   | Meaning                          |
+| ---- | ------ | -------------------------------- |
+| `'8'`  | array  | Unknown (empty array observed)   |
+| `'33'` | array  | Unknown (code execution metadata)|
+| `'59'` | array  | **Generated files** (see below)  |
+
+#### Generated file structure (`extension['59']`)
+
+`extension['59']` is an array containing one element, which is itself
+an array of file entries:
+
+```
+extension['59'] = [
+  [fileEntry0, fileEntry1, ...]   // [0] — array of file entries
+]
+```
+
+Each file entry is a 3-element array:
+
+```
+fileEntry = [
+  fileTag,    // [0] — "[file-tag: code-generated-file-<uuid>]"
+  null,       // [1]
+  metadata[]  // [2] — file metadata (see below)
+]
+```
+
+#### File metadata (`fileEntry[2]`)
+
+| Index | Type     | Meaning              | Example                                                        |
+| ----- | -------- | -------------------- | -------------------------------------------------------------- |
+| 0     | null     | —                    | —                                                              |
+| 1     | number   | Type code            | `10`                                                           |
+| 2     | string   | **Filename**         | `"<filename>"`                                                 |
+| 3     | null     | —                    | —                                                              |
+| 4     | null     | —                    | —                                                              |
+| 5     | string   | Data token           | `"$<base64-like token>"` (300+ chars)                         |
+| 6     | null     | —                    | —                                                              |
+| 7     | array[3] | **URLs** (see below) | —                                                              |
+| 8–10  | null     | —                    | —                                                              |
+| 11    | string   | **MIME type**        | `"<mime-type>"`                                                |
+
+#### File URLs (`metadata[7]`)
+
+| Index | Type   | Meaning          | Example                                                                                      |
+| ----- | ------ | ---------------- | -------------------------------------------------------------------------------------------- |
+| 0     | string | Thumbnail URL    | `https://drive.google.com/viewer/thumb?ds=...`                                               |
+| 1     | string | **Download URL** | `https://contribution.usercontent.google.com/download?c=...&filename=<filename>&opi=...`    |
+| 2     | string | Upload URL       | `https://drive.google.com/viewer/upload?ds=...`                                              |
+
+The **download URL** (`metadata[7][1]`) is a direct link to download
+the generated file. It includes the filename as a query parameter and
+an opaque `c` parameter encoding the file's storage location. This URL
+is authenticated via the user's Google cookies.
+
+The exporter extracts this URL and renders it as a markdown download
+link in the "Generated files" section, and as a `downloadUrl` field
+in JSON output. File-tag placeholders in the assistant markdown are
+replaced with these download links.
+
+#### File tags in assistant markdown
+
+The assistant markdown references generated files using inline tags:
+
+```
+[file-tag: code-generated-file-<uuid>]
+```
+
+Example:
+
+```markdown
+I've created the Word document for you.
+
+[file-tag: code-generated-file-<uuid>]
+
+The document contains...
+```
+
+These tags are cross-referenced with file entries in `extension['59']`
+and replaced with download links during markdown rendering.
+
+#### Code execution metadata (`extension['33']`)
+
+Observed structure (when code execution is present):
+
+```
+extension['33'] = [
+  null,
+  [
+    [null, null, null, null, 4],  // step 0
+    [null, null, null, null, 4],  // step 1
+    ...
+  ]
+]
+```
+
+The `4` value likely indicates a code execution step type. The
+assistant markdown contains fenced code blocks with
+`code_reference` and `code_stdout` tags that correspond to these
+steps:
+
+````markdown
+```python?code_reference&code_event_index=1
+<code>
+```
+
+```text?code_stdout&code_event_index=1
+<output>
+```
+````
+
+### User-uploaded files (`turn[2][0][4]`)
+
+> **Not yet observed in captured data.** The field exists but was
+> empty (`[[]]`) in all observed conversations.
+
+`turn[2][0][4]` is the attachments array in the user prompt wrapper.
+In conversations without file uploads, it is `[[]]` (array containing
+an empty array). The exporter extracts this field as `turn.uploadedFiles`
+(opaque `{ raw }` objects) when non-empty, but the structure has not
+been confirmed from observed data.
+
+To document uploaded file structure, a conversation with actual file
+uploads (images, PDFs, documents) needs to be analyzed.
+
+## Summary of fields the exporter extracts vs. renders
+
+> The following table refers to the
+> [gemini-conversation-exporter](https://github.com/tobiashochguertel/gemini-conversation-exporter)
+> userscript — a fork of
+> [dikelps/gemini-conversation-exporter](https://github.com/dikelps/gemini-conversation-exporter)
+> with extended turn extraction and rendering.
+>
+> - **Extracted?** — whether `extractTurn()` in `src/core.js` reads the
+>   field from the raw API response into the `Turn` object
+> - **Markdown?** — whether `renderMarkdown()` outputs the field in the
+>   exported `.md` file
+> - **JSON?** — whether `renderJson()` outputs the field in the exported
+>   `.json` file
+
+| Field                           | Path                     | Extracted?  | Markdown?                         | JSON?                             |
+| ------------------------------- | ------------------------ | ----------- | --------------------------------- | --------------------------------- |
+| Conversation ID                 | `turn[0][0]`             | ✅          | ✅ (metadata comment)             | ✅ (top-level `conversationId`)   |
+| Response ID                     | `turn[0][1]`             | ✅          | ✅ (metadata comment)             | ✅                                |
+| Parent response ID              | `turn[1][1]`             | ✅          | ✅ (metadata comment)             | ✅                                |
+| Parent candidate ID             | `turn[1][2]`             | ✅          | ✅ (metadata comment)             | ✅                                |
+| User prompt                     | `turn[2][0][0]`          | ✅          | ✅ (User section)                 | ✅ (`userMarkdown`)               |
+| Candidate ID                    | `candidate[0]`           | ✅          | ✅ (metadata comment)             | ✅                                |
+| Assistant markdown              | `candidate[1][0]`        | ✅          | ✅ (Gemini section)               | ✅ (`assistantMarkdown`)          |
+| Timestamp                       | `turn[4]`                | ✅          | ✅ (metadata comment)             | ✅                                |
+| Model name                      | `turn[3][21]`            | ✅          | ✅ (metadata comment)             | ✅                                |
+| Language                        | `turn[3][8]`             | ✅          | ✅ (metadata comment)             | ✅                                |
+| Thinking text                   | `candidate[37][0][0]`    | ✅          | ✅ (`<details>` block)            | ✅ (`thinking`)                   |
+| Thinking steps                  | `candidate[37][1]`       | ✅          | ✅ (in `<details>`)               | ✅ (in `thinking`)                |
+| Web citations                   | `candidate[2][1]`        | ✅          | ✅ (Citations section)            | ✅ (`webCitations`)               |
+| Extension/tool results          | `candidate[12]`          | ✅ (opaque) | ✅ (`<details>` block)            | ✅ (`extensions`)                 |
+| Feedback/ratings                | `turn[3][1]`             | ✅          | ✅ (`<details>` block)            | ✅ (`feedback`)                   |
+| Source index                    | (computed)               | ✅          | ✅ (metadata comment)             | ✅                                |
+| **Generated file metadata**     | `candidate[12][0]['59']` | ✅ (structured `generatedFiles`) | ✅ (Generated files section with download links) | ✅ (in `extensions[].generatedFiles`) |
+| **Generated file download URL** | `metadata[7][1]`         | ✅          | ✅ (as markdown link)             | ✅ (as `downloadUrl` field)       |
+| **User-uploaded files**         | `turn[2][0][4]`          | ✅ (opaque `uploadedFiles`) | ✅ (collapsible JSON dump)        | ✅ (as `uploadedFiles`)           |
+
+### What's still missing
+
+1. **Generated file downloading** — the download URL at `metadata[7][1]` is now extracted and
+   rendered as a link, but the actual file content is not downloaded during export. A future
+   feature could fetch the file and save it alongside the markdown/JSON.
+2. **User-uploaded files** — `turn[2][0][4]` is now extracted as opaque `uploadedFiles`, but
+   the structure is not yet confirmed from observed data (it was empty in all captured
+   conversations). A conversation with actual file uploads needs to be analyzed to document
+   and parse this field's structure.
 
 ## How to reproduce this analysis
 
