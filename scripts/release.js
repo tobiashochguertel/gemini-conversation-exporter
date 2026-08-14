@@ -151,7 +151,7 @@ let changelogEntry = "";
 try {
   console.log("release: generating changelog via communique...");
   changelogEntry = execSync(
-    `communique generate ${tag} --concise`,
+    `mise x -- communique generate ${tag} --concise`,
     { cwd: projectRoot, encoding: "utf8", env, stdio: ["pipe", "pipe", "pipe"] },
   ).trim();
 } catch (err) {
