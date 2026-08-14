@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.3 - 2026-08-14
+
+## Fixed
+
+- Fixed rendering of select option controls in the export options panel so that dropdowns, labels, and descriptions display in a full-width column layout instead of being constrained to a narrow column (8aeda33).
+
 ## 0.7.2 - 2026-08-14
 
 ## Fixed
