@@ -704,6 +704,63 @@ const Utils = Object.freeze({
   },
 });
 
+/**
+ * Generic paginated history fetcher.
+ *
+ * Implements the common flow for fetching paginated conversation history
+ * from a web app's internal RPC endpoint:
+ *
+ *   1. Get site config (auth tokens, etc.)
+ *   2. Build query parameters
+ *   3. Build request body
+ *   4. Build the endpoint URL
+ *   5. Build fetch options (with cross-realm cloning for Firefox)
+ *   6. Execute the fetch
+ *   7. Validate the response
+ *
+ * Site-specific behavior is injected via an adapter object that provides:
+ *
+ *   - pageWindow:     the window object to fetch from
+ *   - getConfig():    returns site-specific auth/config values
+ *   - buildQuery(config, cursor):  returns URLSearchParams for the query string
+ *   - buildBody(config, cursor):   returns a string (URL-encoded body)
+ *   - buildEndpoint(query):        returns the full request URL string
+ *   - buildFetchOptions(body):     returns the fetch options object
+ *     (the fetcher handles cloneForPageRealm internally)
+ */
+
+const HistoryFetcher = Object.freeze({
+  /**
+   * Fetch a single page of conversation history.
+   *
+   * @param {object} adapter - Site-specific adapter (see module docs).
+   * @param {string|null} cursor - Pagination cursor from the previous page, or null for the first page.
+   * @returns {Promise<string>} Raw response text from the RPC endpoint.
+   * @throws {Error} If the fetch fails or the response is not OK.
+   */
+  async fetchPage(adapter, cursor) {
+    const config = adapter.getConfig();
+    const query = adapter.buildQuery(config, cursor);
+    const body = adapter.buildBody(config, cursor);
+    const endpoint = adapter.buildEndpoint(query);
+    const requestOptions = Utils.cloneForPageRealm(
+      adapter.buildFetchOptions(body),
+      adapter.pageWindow,
+    );
+
+    const response = await adapter.pageWindow.fetch(endpoint, requestOptions);
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error(
+        `History request failed with HTTP ${response.status}.`,
+      );
+    }
+
+    return text;
+  },
+});
+
 const ROOT_ID = "gemini-web-exporter-root";
 const HISTORY_PAGE_SIZE = 50;
 const PREFERENCE_KEYS = Object.freeze({
@@ -745,168 +802,142 @@ const PREFERENCE_KEYS = Object.freeze({
     return config;
   }
 
-  async function fetchHistoryPage(conversationId, cursor) {
-    const config = getGeminiConfig();
-    const query = new URLSearchParams({
-      rpcids: Core.HISTORY_RPC_ID,
-      "source-path": location.pathname,
-      bl: config.cfb2h,
-      "f.sid": config.FdrFJe,
-      hl: (document.documentElement.lang || "en").split("-")[0],
-      _reqid: Utils.makeRequestId(),
-      rt: "c",
-    });
-    const pageId = new URLSearchParams(location.search).get("pageId");
-    if (pageId) {
-      query.set("pageId", pageId);
-    }
-    const rpcArguments = [
-      conversationId,
-      HISTORY_PAGE_SIZE,
-      cursor,
-      1,
-      [0],
-      [4],
-      null,
-      1,
-    ];
-    const rpcCall = [
-      Core.HISTORY_RPC_ID,
-      JSON.stringify(rpcArguments),
-      null,
-      "generic",
-    ];
-    const body = new URLSearchParams({
-      "f.req": JSON.stringify([[rpcCall]]),
-      at: config.SNlM0e,
-    });
-    const endpointPath = Core.accountScopedPath(
-      location.pathname,
-      "/_/BardChatUi/data/batchexecute",
-    );
-    const endpoint = new URL(endpointPath, location.origin);
-    endpoint.search = query.toString();
+  function createGeminiAdapter(conversationId) {
+    return {
+      pageWindow,
 
-    const requestOptions = Utils.cloneForPageRealm({
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        "X-Same-Domain": "1",
+      getConfig() {
+        return getGeminiConfig();
       },
-      body: body.toString(),
-    });
-    const response = await pageWindow.fetch(
-      endpoint.toString(),
-      requestOptions,
-    );
-    const text = await response.text();
 
-    if (!response.ok) {
-      throw new Error(
-        `Gemini history request failed with HTTP ${response.status}.`,
-      );
-    }
+      buildQuery(config, cursor) {
+        const query = new URLSearchParams({
+          rpcids: Core.HISTORY_RPC_ID,
+          "source-path": location.pathname,
+          bl: config.cfb2h,
+          "f.sid": config.FdrFJe,
+          hl: (document.documentElement.lang || "en").split("-")[0],
+          _reqid: Utils.makeRequestId(),
+          rt: "c",
+        });
+        const pageId = new URLSearchParams(location.search).get("pageId");
+        if (pageId) {
+          query.set("pageId", pageId);
+        }
+        return query;
+      },
 
-    return text;
+      buildBody(config, cursor) {
+        const rpcArguments = [
+          conversationId,
+          HISTORY_PAGE_SIZE,
+          cursor,
+          1,
+          [0],
+          [4],
+          null,
+          1,
+        ];
+        const rpcCall = [
+          Core.HISTORY_RPC_ID,
+          JSON.stringify(rpcArguments),
+          null,
+          "generic",
+        ];
+        const body = new URLSearchParams({
+          "f.req": JSON.stringify([[rpcCall]]),
+          at: config.SNlM0e,
+        });
+        return body.toString();
+      },
+
+      buildEndpoint(query) {
+        const endpointPath = Core.accountScopedPath(
+          location.pathname,
+          "/_/BardChatUi/data/batchexecute",
+        );
+        const endpoint = new URL(endpointPath, location.origin);
+        endpoint.search = query.toString();
+        return endpoint.toString();
+      },
+
+      buildFetchOptions(body) {
+        return {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            "X-Same-Domain": "1",
+          },
+          body,
+        };
+      },
+    };
   }
 
-  function createUi() {
-    const preferences = {
-      collapsed: PreferenceStorage.readBoolean(PREFERENCE_KEYS.collapsed, false),
-      includeMetadata: PreferenceStorage.readBoolean(
-        PREFERENCE_KEYS.includeMetadata,
-        true,
-      ),
-      includeOutline: PreferenceStorage.readBoolean(
-        PREFERENCE_KEYS.includeOutline,
-        true,
-      ),
-    };
+  async function fetchHistoryPage(conversationId, cursor) {
+    const adapter = createGeminiAdapter(conversationId);
+    return HistoryFetcher.fetchPage(adapter, cursor);
+  }
+
+  // ── UI builder functions ──────────────────────────────────────────────
+
+  function createShadowRoot(rootId, cssText) {
     const host = document.createElement("div");
-    host.id = ROOT_ID;
+    host.id = rootId;
     const shadow = host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
-    style.textContent = ":host {\r\n  all: initial;\r\n  position: fixed;\r\n  right: 22px;\r\n  bottom: 22px;\r\n  z-index: 2147483647;\r\n  font-family: \"Google Sans\", system-ui, -apple-system, sans-serif;\r\n}\r\n\r\n.stack {\r\n  display: flex;\r\n  flex-direction: column;\r\n  align-items: flex-end;\r\n  gap: 10px;\r\n}\r\n\r\nbutton,\r\ninput {\r\n  font: inherit;\r\n}\r\n\r\nbutton {\r\n  appearance: none;\r\n  border: 0;\r\n  cursor: pointer;\r\n}\r\n\r\n.control {\r\n  display: flex;\r\n  overflow: hidden;\r\n  border: 1px solid rgba(255, 255, 255, 0.22);\r\n  border-radius: 999px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.export-button,\r\n.menu-button {\r\n  display: inline-flex;\r\n  min-height: 42px;\r\n  align-items: center;\r\n  justify-content: center;\r\n  background: transparent;\r\n  color: inherit;\r\n}\r\n\r\n.export-button {\r\n  gap: 8px;\r\n  min-width: 142px;\r\n  padding: 0 16px;\r\n  font-weight: 650;\r\n  white-space: nowrap;\r\n  transition: min-width 120ms ease, padding 120ms ease;\r\n}\r\n\r\n.download-icon {\r\n  font-size: 18px;\r\n  line-height: 1;\r\n}\r\n\r\n.menu-button {\r\n  width: 38px;\r\n  border-left: 1px solid rgba(255, 255, 255, 0.16);\r\n  font-size: 21px;\r\n  line-height: 1;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-button {\r\n  min-width: 42px;\r\n  padding: 0 12px;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-label {\r\n  display: none;\r\n}\r\n\r\n.export-button:hover,\r\n.menu-button:hover {\r\n  background: #303030;\r\n}\r\n\r\nbutton:focus-visible {\r\n  outline: 3px solid #a8c7fa;\r\n  outline-offset: -3px;\r\n}\r\n\r\nbutton:disabled {\r\n  cursor: progress;\r\n  opacity: 0.72;\r\n}\r\n\r\n.panel {\r\n  box-sizing: border-box;\r\n  width: min(270px, calc(100vw - 32px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 14px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  padding: 14px;\r\n  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.34);\r\n}\r\n\r\n.panel[hidden] {\r\n  display: none;\r\n}\r\n\r\n.panel-heading {\r\n  margin: 0 0 10px;\r\n  font-size: 13px;\r\n  font-weight: 700;\r\n  letter-spacing: 0.01em;\r\n}\r\n\r\n.option {\r\n  display: grid;\r\n  grid-template-columns: 20px minmax(0, 1fr);\r\n  gap: 9px;\r\n  align-items: start;\r\n  border-radius: 9px;\r\n  cursor: pointer;\r\n  padding: 8px 6px;\r\n}\r\n\r\n.option:hover {\r\n  background: rgba(255, 255, 255, 0.07);\r\n}\r\n\r\n.option input {\r\n  width: 16px;\r\n  height: 16px;\r\n  margin: 1px 0 0;\r\n  accent-color: #a8c7fa;\r\n}\r\n\r\n.option-copy {\r\n  display: flex;\r\n  min-width: 0;\r\n  flex-direction: column;\r\n  gap: 3px;\r\n}\r\n\r\n.option-label {\r\n  font-size: 13px;\r\n  font-weight: 650;\r\n  line-height: 1.2;\r\n}\r\n\r\n.option-description {\r\n  color: #c7c7c7;\r\n  font-size: 11px;\r\n  font-weight: 450;\r\n  line-height: 1.35;\r\n}\r\n\r\n.compact-toggle {\r\n  width: 100%;\r\n  margin-top: 10px;\r\n  border-top: 1px solid rgba(255, 255, 255, 0.14);\r\n  background: transparent;\r\n  color: #a8c7fa;\r\n  padding: 12px 6px 3px;\r\n  text-align: left;\r\n  font-size: 12px;\r\n  font-weight: 650;\r\n}\r\n\r\n.compact-toggle:hover {\r\n  color: #d3e3fd;\r\n}\r\n\r\n.toast {\r\n  box-sizing: border-box;\r\n  display: none;\r\n  max-width: min(420px, calc(100vw - 44px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 12px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  font: 500 13px/1.45 system-ui, -apple-system, sans-serif;\r\n  padding: 11px 13px;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.toast[data-kind=\"error\"] {\r\n  background: #8c1d18;\r\n}\r\n\r\n@media (max-width: 520px) {\r\n  :host {\r\n    right: 12px;\r\n    bottom: 12px;\r\n  }\r\n}";
+    style.textContent = cssText;
+    shadow.append(style);
+    return { host, shadow };
+  }
 
-    const stack = document.createElement("div");
-    stack.className = "stack";
+  function createToast() {
+    const element = document.createElement("div");
+    element.className = "toast";
+    element.setAttribute("role", "status");
+    element.setAttribute("aria-live", "polite");
+    let timer = null;
 
-    const toast = document.createElement("div");
-    toast.className = "toast";
-    toast.setAttribute("role", "status");
-    toast.setAttribute("aria-live", "polite");
-
-    const panel = document.createElement("div");
-    panel.className = "panel";
-    panel.hidden = true;
-    panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-label", "Export options");
-
-    const panelHeading = document.createElement("p");
-    panelHeading.className = "panel-heading";
-    panelHeading.textContent = "Export options";
-
-    function createOption({
-      label,
-      description,
-      checked,
-      onChange,
-    }) {
-      const option = document.createElement("label");
-      option.className = "option";
-
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = checked;
-      input.addEventListener("change", () => onChange(input.checked));
-
-      const copy = document.createElement("span");
-      copy.className = "option-copy";
-
-      const optionLabel = document.createElement("span");
-      optionLabel.className = "option-label";
-      optionLabel.textContent = label;
-
-      const optionDescription = document.createElement("span");
-      optionDescription.className = "option-description";
-      optionDescription.textContent = description;
-
-      copy.append(optionLabel, optionDescription);
-      option.append(input, copy);
-      return { option, input };
+    function show(message, kind = "success", duration = 8_000) {
+      clearTimeout(timer);
+      element.textContent = message;
+      element.dataset.kind = kind;
+      element.style.display = "block";
+      timer = setTimeout(() => {
+        element.style.display = "none";
+      }, duration);
     }
 
-    const outlineOption = createOption({
-      label: "Conversation outline",
-      description: "Linked turn list with short prompt previews",
-      checked: preferences.includeOutline,
-      onChange(value) {
-        preferences.includeOutline = value;
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
-      },
-    });
-    const metadataOption = createOption({
-      label: "Export metadata",
-      description: "Source, export details, validation and turn IDs",
-      checked: preferences.includeMetadata,
-      onChange(value) {
-        preferences.includeMetadata = value;
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
-      },
-    });
+    return { element, show };
+  }
 
-    const compactToggle = document.createElement("button");
-    compactToggle.type = "button";
-    compactToggle.className = "compact-toggle";
+  function createCheckboxOption({ label, description, checked, onChange }) {
+    const option = document.createElement("label");
+    option.className = "option";
 
-    panel.append(
-      panelHeading,
-      outlineOption.option,
-      metadataOption.option,
-      compactToggle,
-    );
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    input.addEventListener("change", () => onChange(input.checked));
 
+    const copy = document.createElement("span");
+    copy.className = "option-copy";
+
+    const optionLabel = document.createElement("span");
+    optionLabel.className = "option-label";
+    optionLabel.textContent = label;
+
+    const optionDescription = document.createElement("span");
+    optionDescription.className = "option-description";
+    optionDescription.textContent = description;
+
+    copy.append(optionLabel, optionDescription);
+    option.append(input, copy);
+    return { option, input };
+  }
+
+  function createExportControl() {
     const control = document.createElement("div");
     control.className = "control";
 
@@ -935,131 +966,178 @@ const PREFERENCE_KEYS = Object.freeze({
     menuButton.setAttribute("aria-expanded", "false");
 
     control.append(exportButton, menuButton);
-    stack.append(toast, panel, control);
-    shadow.append(style, stack);
-    let toastTimer = null;
-
-    function showToast(message, kind = "success", duration = 8_000) {
-      clearTimeout(toastTimer);
-      toast.textContent = message;
-      toast.dataset.kind = kind;
-      toast.style.display = "block";
-      toastTimer = setTimeout(() => {
-        toast.style.display = "none";
-      }, duration);
-    }
-
-    function setPanelOpen(open) {
-      panel.hidden = !open;
-      menuButton.setAttribute("aria-expanded", String(open));
-    }
-
-    function setCollapsed(collapsed, persist = true) {
-      preferences.collapsed = collapsed;
-      control.dataset.collapsed = String(collapsed);
-      exportButton.title = collapsed ? "Export Markdown" : "";
-      compactToggle.textContent = collapsed
-        ? "Use expanded control"
-        : "Use compact control";
-
-      if (persist) {
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.collapsed, collapsed);
-      }
-    }
-
-    async function exportCurrentConversation() {
-      const conversationId = Core.conversationIdFromPath(location.pathname);
-      if (!conversationId) {
-        showToast("Open a Gemini conversation before exporting.", "error");
-        return;
-      }
-
-      setPanelOpen(false);
-      exportButton.disabled = true;
-      exportButton.setAttribute("aria-label", "Exporting");
-      downloadIcon.textContent = "…";
-      exportLabel.textContent = "Exporting…";
-
-      try {
-        const history = await Core.collectHistoryPages((cursor) =>
-          fetchHistoryPage(conversationId, cursor),
-        );
-        const turns = Core.historyToChronologicalTurns(
-          history.rawTurnsNewestFirst,
-        );
-        const diagnostics = Core.validateConversation(turns);
-        const title = Core.cleanDocumentTitle(document.title);
-        const exportedAt = new Date().toISOString();
-        const markdown = Core.renderMarkdown({
-          title,
-          sourceUrl: location.href,
-          conversationId,
-          exportedAt,
-          turns,
-          diagnostics,
-          includeMetadata: preferences.includeMetadata,
-          includeOutline: preferences.includeOutline,
-        });
-        const filename = Core.safeFilename(title);
-
-        Utils.downloadTextFile(markdown, filename);
-        console.info("[Gemini Exporter] Export complete", {
-          filename,
-          pages: history.pages.length,
-          ...diagnostics,
-        });
-        showToast(
-          `Exported ${turns.length} turns from ${history.pages.length} page${
-            history.pages.length === 1 ? "" : "s"
-          }. Validation: ${diagnostics.fingerprint}.`,
-        );
-      } catch (error) {
-        console.error("[Gemini Exporter] Export failed", error);
-        showToast(
-          `Export stopped: ${error instanceof Error ? error.message : String(error)}`,
-          "error",
-          15_000,
-        );
-      } finally {
-        exportButton.disabled = false;
-        exportButton.setAttribute("aria-label", "Export Markdown");
-        downloadIcon.textContent = "↓";
-        exportLabel.textContent = "Export Markdown";
-      }
-    }
-
-    exportButton.addEventListener("click", exportCurrentConversation);
-    menuButton.addEventListener("click", () => {
-      setPanelOpen(panel.hidden);
-    });
-    compactToggle.addEventListener("click", () => {
-      setCollapsed(!preferences.collapsed);
-      setPanelOpen(false);
-    });
-    document.addEventListener(
-      "pointerdown",
-      (event) => {
-        if (!event.composedPath().includes(host)) {
-          setPanelOpen(false);
-        }
-      },
-      true,
-    );
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        setPanelOpen(false);
-      }
-    });
-
-    setCollapsed(preferences.collapsed, false);
-    return { host, exportButton };
+    return { control, exportButton, menuButton, downloadIcon, exportLabel };
   }
 
-  const ui = createUi();
-  document.documentElement.append(ui.host);
+  function createOptionsPanel(preferences) {
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.hidden = true;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Export options");
+
+    const panelHeading = document.createElement("p");
+    panelHeading.className = "panel-heading";
+    panelHeading.textContent = "Export options";
+
+    const outlineOption = createCheckboxOption({
+      label: "Conversation outline",
+      description: "Linked turn list with short prompt previews",
+      checked: preferences.includeOutline,
+      onChange(value) {
+        preferences.includeOutline = value;
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
+      },
+    });
+    const metadataOption = createCheckboxOption({
+      label: "Export metadata",
+      description: "Source, export details, validation and turn IDs",
+      checked: preferences.includeMetadata,
+      onChange(value) {
+        preferences.includeMetadata = value;
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
+      },
+    });
+
+    const compactToggle = document.createElement("button");
+    compactToggle.type = "button";
+    compactToggle.className = "compact-toggle";
+
+    panel.append(panelHeading, outlineOption.option, metadataOption.option, compactToggle);
+    return { panel, compactToggle };
+  }
+
+  // ── UI assembly + export logic ─────────────────────────────────────────
+
+  const preferences = {
+    collapsed: PreferenceStorage.readBoolean(PREFERENCE_KEYS.collapsed, false),
+    includeMetadata: PreferenceStorage.readBoolean(
+      PREFERENCE_KEYS.includeMetadata,
+      true,
+    ),
+    includeOutline: PreferenceStorage.readBoolean(
+      PREFERENCE_KEYS.includeOutline,
+      true,
+    ),
+  };
+
+  const { host, shadow } = createShadowRoot(ROOT_ID, ":host {\r\n  all: initial;\r\n  position: fixed;\r\n  right: 22px;\r\n  bottom: 22px;\r\n  z-index: 2147483647;\r\n  font-family: \"Google Sans\", system-ui, -apple-system, sans-serif;\r\n}\r\n\r\n.stack {\r\n  display: flex;\r\n  flex-direction: column;\r\n  align-items: flex-end;\r\n  gap: 10px;\r\n}\r\n\r\nbutton,\r\ninput {\r\n  font: inherit;\r\n}\r\n\r\nbutton {\r\n  appearance: none;\r\n  border: 0;\r\n  cursor: pointer;\r\n}\r\n\r\n.control {\r\n  display: flex;\r\n  overflow: hidden;\r\n  border: 1px solid rgba(255, 255, 255, 0.22);\r\n  border-radius: 999px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.export-button,\r\n.menu-button {\r\n  display: inline-flex;\r\n  min-height: 42px;\r\n  align-items: center;\r\n  justify-content: center;\r\n  background: transparent;\r\n  color: inherit;\r\n}\r\n\r\n.export-button {\r\n  gap: 8px;\r\n  min-width: 142px;\r\n  padding: 0 16px;\r\n  font-weight: 650;\r\n  white-space: nowrap;\r\n  transition: min-width 120ms ease, padding 120ms ease;\r\n}\r\n\r\n.download-icon {\r\n  font-size: 18px;\r\n  line-height: 1;\r\n}\r\n\r\n.menu-button {\r\n  width: 38px;\r\n  border-left: 1px solid rgba(255, 255, 255, 0.16);\r\n  font-size: 21px;\r\n  line-height: 1;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-button {\r\n  min-width: 42px;\r\n  padding: 0 12px;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-label {\r\n  display: none;\r\n}\r\n\r\n.export-button:hover,\r\n.menu-button:hover {\r\n  background: #303030;\r\n}\r\n\r\nbutton:focus-visible {\r\n  outline: 3px solid #a8c7fa;\r\n  outline-offset: -3px;\r\n}\r\n\r\nbutton:disabled {\r\n  cursor: progress;\r\n  opacity: 0.72;\r\n}\r\n\r\n.panel {\r\n  box-sizing: border-box;\r\n  width: min(270px, calc(100vw - 32px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 14px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  padding: 14px;\r\n  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.34);\r\n}\r\n\r\n.panel[hidden] {\r\n  display: none;\r\n}\r\n\r\n.panel-heading {\r\n  margin: 0 0 10px;\r\n  font-size: 13px;\r\n  font-weight: 700;\r\n  letter-spacing: 0.01em;\r\n}\r\n\r\n.option {\r\n  display: grid;\r\n  grid-template-columns: 20px minmax(0, 1fr);\r\n  gap: 9px;\r\n  align-items: start;\r\n  border-radius: 9px;\r\n  cursor: pointer;\r\n  padding: 8px 6px;\r\n}\r\n\r\n.option:hover {\r\n  background: rgba(255, 255, 255, 0.07);\r\n}\r\n\r\n.option input {\r\n  width: 16px;\r\n  height: 16px;\r\n  margin: 1px 0 0;\r\n  accent-color: #a8c7fa;\r\n}\r\n\r\n.option-copy {\r\n  display: flex;\r\n  min-width: 0;\r\n  flex-direction: column;\r\n  gap: 3px;\r\n}\r\n\r\n.option-label {\r\n  font-size: 13px;\r\n  font-weight: 650;\r\n  line-height: 1.2;\r\n}\r\n\r\n.option-description {\r\n  color: #c7c7c7;\r\n  font-size: 11px;\r\n  font-weight: 450;\r\n  line-height: 1.35;\r\n}\r\n\r\n.compact-toggle {\r\n  width: 100%;\r\n  margin-top: 10px;\r\n  border-top: 1px solid rgba(255, 255, 255, 0.14);\r\n  background: transparent;\r\n  color: #a8c7fa;\r\n  padding: 12px 6px 3px;\r\n  text-align: left;\r\n  font-size: 12px;\r\n  font-weight: 650;\r\n}\r\n\r\n.compact-toggle:hover {\r\n  color: #d3e3fd;\r\n}\r\n\r\n.toast {\r\n  box-sizing: border-box;\r\n  display: none;\r\n  max-width: min(420px, calc(100vw - 44px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 12px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  font: 500 13px/1.45 system-ui, -apple-system, sans-serif;\r\n  padding: 11px 13px;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.toast[data-kind=\"error\"] {\r\n  background: #8c1d18;\r\n}\r\n\r\n@media (max-width: 520px) {\r\n  :host {\r\n    right: 12px;\r\n    bottom: 12px;\r\n  }\r\n}");
+  const toast = createToast();
+  const { panel, compactToggle } = createOptionsPanel(preferences);
+  const { control, exportButton, menuButton, downloadIcon, exportLabel } = createExportControl();
+
+  const stack = document.createElement("div");
+  stack.className = "stack";
+  stack.append(toast.element, panel, control);
+  shadow.append(stack);
+
+  function setPanelOpen(open) {
+    panel.hidden = !open;
+    menuButton.setAttribute("aria-expanded", String(open));
+  }
+
+  function setCollapsed(collapsed, persist = true) {
+    preferences.collapsed = collapsed;
+    control.dataset.collapsed = String(collapsed);
+    exportButton.title = collapsed ? "Export Markdown" : "";
+    compactToggle.textContent = collapsed
+      ? "Use expanded control"
+      : "Use compact control";
+
+    if (persist) {
+      PreferenceStorage.writeBoolean(PREFERENCE_KEYS.collapsed, collapsed);
+    }
+  }
+
+  async function exportCurrentConversation() {
+    const conversationId = Core.conversationIdFromPath(location.pathname);
+    if (!conversationId) {
+      toast.show("Open a Gemini conversation before exporting.", "error");
+      return;
+    }
+
+    setPanelOpen(false);
+    exportButton.disabled = true;
+    exportButton.setAttribute("aria-label", "Exporting");
+    downloadIcon.textContent = "…";
+    exportLabel.textContent = "Exporting…";
+
+    try {
+      const history = await Core.collectHistoryPages((cursor) =>
+        fetchHistoryPage(conversationId, cursor),
+      );
+      const turns = Core.historyToChronologicalTurns(
+        history.rawTurnsNewestFirst,
+      );
+      const diagnostics = Core.validateConversation(turns);
+      const title = Core.cleanDocumentTitle(document.title);
+      const exportedAt = new Date().toISOString();
+      const markdown = Core.renderMarkdown({
+        title,
+        sourceUrl: location.href,
+        conversationId,
+        exportedAt,
+        turns,
+        diagnostics,
+        includeMetadata: preferences.includeMetadata,
+        includeOutline: preferences.includeOutline,
+      });
+      const filename = Core.safeFilename(title);
+
+      Utils.downloadTextFile(markdown, filename);
+      console.info("[Gemini Exporter] Export complete", {
+        filename,
+        pages: history.pages.length,
+        ...diagnostics,
+      });
+      toast.show(
+        `Exported ${turns.length} turns from ${history.pages.length} page${
+          history.pages.length === 1 ? "" : "s"
+        }. Validation: ${diagnostics.fingerprint}.`,
+      );
+    } catch (error) {
+      console.error("[Gemini Exporter] Export failed", error);
+      toast.show(
+        `Export stopped: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+        15_000,
+      );
+    } finally {
+      exportButton.disabled = false;
+      exportButton.setAttribute("aria-label", "Export Markdown");
+      downloadIcon.textContent = "↓";
+      exportLabel.textContent = "Export Markdown";
+    }
+  }
+
+  exportButton.addEventListener("click", exportCurrentConversation);
+  menuButton.addEventListener("click", () => {
+    setPanelOpen(panel.hidden);
+  });
+  compactToggle.addEventListener("click", () => {
+    setCollapsed(!preferences.collapsed);
+    setPanelOpen(false);
+  });
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (!event.composedPath().includes(host)) {
+        setPanelOpen(false);
+      }
+    },
+    true,
+  );
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setPanelOpen(false);
+    }
+  });
+
+  setCollapsed(preferences.collapsed, false);
+  document.documentElement.append(host);
 
   function syncRoute() {
-    ui.host.style.display = isConversationPage() ? "block" : "none";
+    host.style.display = isConversationPage() ? "block" : "none";
   }
 
   syncRoute();

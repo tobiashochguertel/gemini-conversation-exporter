@@ -40,6 +40,7 @@ const metadata = `// ==UserScript==
 
 const preferenceStoragePath = path.join(projectRoot, "src", "preference-storage.js");
 const utilsPath = path.join(projectRoot, "src", "utils.js");
+const historyFetcherPath = path.join(projectRoot, "src", "history-fetcher.js");
 
 const cssContent = fs.readFileSync(cssPath, "utf8").trim();
 const mainContent = fs.readFileSync(mainPath, "utf8")
@@ -53,6 +54,8 @@ const output = [
   fs.readFileSync(preferenceStoragePath, "utf8").trim(),
   "",
   fs.readFileSync(utilsPath, "utf8").trim(),
+  "",
+  fs.readFileSync(historyFetcherPath, "utf8").trim(),
   "",
   mainContent.trim(),
   "",

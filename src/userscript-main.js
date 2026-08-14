@@ -39,168 +39,142 @@ const PREFERENCE_KEYS = Object.freeze({
     return config;
   }
 
-  async function fetchHistoryPage(conversationId, cursor) {
-    const config = getGeminiConfig();
-    const query = new URLSearchParams({
-      rpcids: Core.HISTORY_RPC_ID,
-      "source-path": location.pathname,
-      bl: config.cfb2h,
-      "f.sid": config.FdrFJe,
-      hl: (document.documentElement.lang || "en").split("-")[0],
-      _reqid: Utils.makeRequestId(),
-      rt: "c",
-    });
-    const pageId = new URLSearchParams(location.search).get("pageId");
-    if (pageId) {
-      query.set("pageId", pageId);
-    }
-    const rpcArguments = [
-      conversationId,
-      HISTORY_PAGE_SIZE,
-      cursor,
-      1,
-      [0],
-      [4],
-      null,
-      1,
-    ];
-    const rpcCall = [
-      Core.HISTORY_RPC_ID,
-      JSON.stringify(rpcArguments),
-      null,
-      "generic",
-    ];
-    const body = new URLSearchParams({
-      "f.req": JSON.stringify([[rpcCall]]),
-      at: config.SNlM0e,
-    });
-    const endpointPath = Core.accountScopedPath(
-      location.pathname,
-      "/_/BardChatUi/data/batchexecute",
-    );
-    const endpoint = new URL(endpointPath, location.origin);
-    endpoint.search = query.toString();
+  function createGeminiAdapter(conversationId) {
+    return {
+      pageWindow,
 
-    const requestOptions = Utils.cloneForPageRealm({
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        "X-Same-Domain": "1",
+      getConfig() {
+        return getGeminiConfig();
       },
-      body: body.toString(),
-    });
-    const response = await pageWindow.fetch(
-      endpoint.toString(),
-      requestOptions,
-    );
-    const text = await response.text();
 
-    if (!response.ok) {
-      throw new Error(
-        `Gemini history request failed with HTTP ${response.status}.`,
-      );
-    }
+      buildQuery(config, cursor) {
+        const query = new URLSearchParams({
+          rpcids: Core.HISTORY_RPC_ID,
+          "source-path": location.pathname,
+          bl: config.cfb2h,
+          "f.sid": config.FdrFJe,
+          hl: (document.documentElement.lang || "en").split("-")[0],
+          _reqid: Utils.makeRequestId(),
+          rt: "c",
+        });
+        const pageId = new URLSearchParams(location.search).get("pageId");
+        if (pageId) {
+          query.set("pageId", pageId);
+        }
+        return query;
+      },
 
-    return text;
+      buildBody(config, cursor) {
+        const rpcArguments = [
+          conversationId,
+          HISTORY_PAGE_SIZE,
+          cursor,
+          1,
+          [0],
+          [4],
+          null,
+          1,
+        ];
+        const rpcCall = [
+          Core.HISTORY_RPC_ID,
+          JSON.stringify(rpcArguments),
+          null,
+          "generic",
+        ];
+        const body = new URLSearchParams({
+          "f.req": JSON.stringify([[rpcCall]]),
+          at: config.SNlM0e,
+        });
+        return body.toString();
+      },
+
+      buildEndpoint(query) {
+        const endpointPath = Core.accountScopedPath(
+          location.pathname,
+          "/_/BardChatUi/data/batchexecute",
+        );
+        const endpoint = new URL(endpointPath, location.origin);
+        endpoint.search = query.toString();
+        return endpoint.toString();
+      },
+
+      buildFetchOptions(body) {
+        return {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            "X-Same-Domain": "1",
+          },
+          body,
+        };
+      },
+    };
   }
 
-  function createUi() {
-    const preferences = {
-      collapsed: PreferenceStorage.readBoolean(PREFERENCE_KEYS.collapsed, false),
-      includeMetadata: PreferenceStorage.readBoolean(
-        PREFERENCE_KEYS.includeMetadata,
-        true,
-      ),
-      includeOutline: PreferenceStorage.readBoolean(
-        PREFERENCE_KEYS.includeOutline,
-        true,
-      ),
-    };
+  async function fetchHistoryPage(conversationId, cursor) {
+    const adapter = createGeminiAdapter(conversationId);
+    return HistoryFetcher.fetchPage(adapter, cursor);
+  }
+
+  // ── UI builder functions ──────────────────────────────────────────────
+
+  function createShadowRoot(rootId, cssText) {
     const host = document.createElement("div");
-    host.id = ROOT_ID;
+    host.id = rootId;
     const shadow = host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
-    style.textContent = __EXPORTER_UI_CSS__;
+    style.textContent = cssText;
+    shadow.append(style);
+    return { host, shadow };
+  }
 
-    const stack = document.createElement("div");
-    stack.className = "stack";
+  function createToast() {
+    const element = document.createElement("div");
+    element.className = "toast";
+    element.setAttribute("role", "status");
+    element.setAttribute("aria-live", "polite");
+    let timer = null;
 
-    const toast = document.createElement("div");
-    toast.className = "toast";
-    toast.setAttribute("role", "status");
-    toast.setAttribute("aria-live", "polite");
-
-    const panel = document.createElement("div");
-    panel.className = "panel";
-    panel.hidden = true;
-    panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-label", "Export options");
-
-    const panelHeading = document.createElement("p");
-    panelHeading.className = "panel-heading";
-    panelHeading.textContent = "Export options";
-
-    function createOption({
-      label,
-      description,
-      checked,
-      onChange,
-    }) {
-      const option = document.createElement("label");
-      option.className = "option";
-
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = checked;
-      input.addEventListener("change", () => onChange(input.checked));
-
-      const copy = document.createElement("span");
-      copy.className = "option-copy";
-
-      const optionLabel = document.createElement("span");
-      optionLabel.className = "option-label";
-      optionLabel.textContent = label;
-
-      const optionDescription = document.createElement("span");
-      optionDescription.className = "option-description";
-      optionDescription.textContent = description;
-
-      copy.append(optionLabel, optionDescription);
-      option.append(input, copy);
-      return { option, input };
+    function show(message, kind = "success", duration = 8_000) {
+      clearTimeout(timer);
+      element.textContent = message;
+      element.dataset.kind = kind;
+      element.style.display = "block";
+      timer = setTimeout(() => {
+        element.style.display = "none";
+      }, duration);
     }
 
-    const outlineOption = createOption({
-      label: "Conversation outline",
-      description: "Linked turn list with short prompt previews",
-      checked: preferences.includeOutline,
-      onChange(value) {
-        preferences.includeOutline = value;
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
-      },
-    });
-    const metadataOption = createOption({
-      label: "Export metadata",
-      description: "Source, export details, validation and turn IDs",
-      checked: preferences.includeMetadata,
-      onChange(value) {
-        preferences.includeMetadata = value;
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
-      },
-    });
+    return { element, show };
+  }
 
-    const compactToggle = document.createElement("button");
-    compactToggle.type = "button";
-    compactToggle.className = "compact-toggle";
+  function createCheckboxOption({ label, description, checked, onChange }) {
+    const option = document.createElement("label");
+    option.className = "option";
 
-    panel.append(
-      panelHeading,
-      outlineOption.option,
-      metadataOption.option,
-      compactToggle,
-    );
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    input.addEventListener("change", () => onChange(input.checked));
 
+    const copy = document.createElement("span");
+    copy.className = "option-copy";
+
+    const optionLabel = document.createElement("span");
+    optionLabel.className = "option-label";
+    optionLabel.textContent = label;
+
+    const optionDescription = document.createElement("span");
+    optionDescription.className = "option-description";
+    optionDescription.textContent = description;
+
+    copy.append(optionLabel, optionDescription);
+    option.append(input, copy);
+    return { option, input };
+  }
+
+  function createExportControl() {
     const control = document.createElement("div");
     control.className = "control";
 
@@ -229,131 +203,178 @@ const PREFERENCE_KEYS = Object.freeze({
     menuButton.setAttribute("aria-expanded", "false");
 
     control.append(exportButton, menuButton);
-    stack.append(toast, panel, control);
-    shadow.append(style, stack);
-    let toastTimer = null;
-
-    function showToast(message, kind = "success", duration = 8_000) {
-      clearTimeout(toastTimer);
-      toast.textContent = message;
-      toast.dataset.kind = kind;
-      toast.style.display = "block";
-      toastTimer = setTimeout(() => {
-        toast.style.display = "none";
-      }, duration);
-    }
-
-    function setPanelOpen(open) {
-      panel.hidden = !open;
-      menuButton.setAttribute("aria-expanded", String(open));
-    }
-
-    function setCollapsed(collapsed, persist = true) {
-      preferences.collapsed = collapsed;
-      control.dataset.collapsed = String(collapsed);
-      exportButton.title = collapsed ? "Export Markdown" : "";
-      compactToggle.textContent = collapsed
-        ? "Use expanded control"
-        : "Use compact control";
-
-      if (persist) {
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.collapsed, collapsed);
-      }
-    }
-
-    async function exportCurrentConversation() {
-      const conversationId = Core.conversationIdFromPath(location.pathname);
-      if (!conversationId) {
-        showToast("Open a Gemini conversation before exporting.", "error");
-        return;
-      }
-
-      setPanelOpen(false);
-      exportButton.disabled = true;
-      exportButton.setAttribute("aria-label", "Exporting");
-      downloadIcon.textContent = "…";
-      exportLabel.textContent = "Exporting…";
-
-      try {
-        const history = await Core.collectHistoryPages((cursor) =>
-          fetchHistoryPage(conversationId, cursor),
-        );
-        const turns = Core.historyToChronologicalTurns(
-          history.rawTurnsNewestFirst,
-        );
-        const diagnostics = Core.validateConversation(turns);
-        const title = Core.cleanDocumentTitle(document.title);
-        const exportedAt = new Date().toISOString();
-        const markdown = Core.renderMarkdown({
-          title,
-          sourceUrl: location.href,
-          conversationId,
-          exportedAt,
-          turns,
-          diagnostics,
-          includeMetadata: preferences.includeMetadata,
-          includeOutline: preferences.includeOutline,
-        });
-        const filename = Core.safeFilename(title);
-
-        Utils.downloadTextFile(markdown, filename);
-        console.info("[Gemini Exporter] Export complete", {
-          filename,
-          pages: history.pages.length,
-          ...diagnostics,
-        });
-        showToast(
-          `Exported ${turns.length} turns from ${history.pages.length} page${
-            history.pages.length === 1 ? "" : "s"
-          }. Validation: ${diagnostics.fingerprint}.`,
-        );
-      } catch (error) {
-        console.error("[Gemini Exporter] Export failed", error);
-        showToast(
-          `Export stopped: ${error instanceof Error ? error.message : String(error)}`,
-          "error",
-          15_000,
-        );
-      } finally {
-        exportButton.disabled = false;
-        exportButton.setAttribute("aria-label", "Export Markdown");
-        downloadIcon.textContent = "↓";
-        exportLabel.textContent = "Export Markdown";
-      }
-    }
-
-    exportButton.addEventListener("click", exportCurrentConversation);
-    menuButton.addEventListener("click", () => {
-      setPanelOpen(panel.hidden);
-    });
-    compactToggle.addEventListener("click", () => {
-      setCollapsed(!preferences.collapsed);
-      setPanelOpen(false);
-    });
-    document.addEventListener(
-      "pointerdown",
-      (event) => {
-        if (!event.composedPath().includes(host)) {
-          setPanelOpen(false);
-        }
-      },
-      true,
-    );
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        setPanelOpen(false);
-      }
-    });
-
-    setCollapsed(preferences.collapsed, false);
-    return { host, exportButton };
+    return { control, exportButton, menuButton, downloadIcon, exportLabel };
   }
 
-  const ui = createUi();
-  document.documentElement.append(ui.host);
+  function createOptionsPanel(preferences) {
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.hidden = true;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Export options");
+
+    const panelHeading = document.createElement("p");
+    panelHeading.className = "panel-heading";
+    panelHeading.textContent = "Export options";
+
+    const outlineOption = createCheckboxOption({
+      label: "Conversation outline",
+      description: "Linked turn list with short prompt previews",
+      checked: preferences.includeOutline,
+      onChange(value) {
+        preferences.includeOutline = value;
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
+      },
+    });
+    const metadataOption = createCheckboxOption({
+      label: "Export metadata",
+      description: "Source, export details, validation and turn IDs",
+      checked: preferences.includeMetadata,
+      onChange(value) {
+        preferences.includeMetadata = value;
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
+      },
+    });
+
+    const compactToggle = document.createElement("button");
+    compactToggle.type = "button";
+    compactToggle.className = "compact-toggle";
+
+    panel.append(panelHeading, outlineOption.option, metadataOption.option, compactToggle);
+    return { panel, compactToggle };
+  }
+
+  // ── UI assembly + export logic ─────────────────────────────────────────
+
+  const preferences = {
+    collapsed: PreferenceStorage.readBoolean(PREFERENCE_KEYS.collapsed, false),
+    includeMetadata: PreferenceStorage.readBoolean(
+      PREFERENCE_KEYS.includeMetadata,
+      true,
+    ),
+    includeOutline: PreferenceStorage.readBoolean(
+      PREFERENCE_KEYS.includeOutline,
+      true,
+    ),
+  };
+
+  const { host, shadow } = createShadowRoot(ROOT_ID, __EXPORTER_UI_CSS__);
+  const toast = createToast();
+  const { panel, compactToggle } = createOptionsPanel(preferences);
+  const { control, exportButton, menuButton, downloadIcon, exportLabel } = createExportControl();
+
+  const stack = document.createElement("div");
+  stack.className = "stack";
+  stack.append(toast.element, panel, control);
+  shadow.append(stack);
+
+  function setPanelOpen(open) {
+    panel.hidden = !open;
+    menuButton.setAttribute("aria-expanded", String(open));
+  }
+
+  function setCollapsed(collapsed, persist = true) {
+    preferences.collapsed = collapsed;
+    control.dataset.collapsed = String(collapsed);
+    exportButton.title = collapsed ? "Export Markdown" : "";
+    compactToggle.textContent = collapsed
+      ? "Use expanded control"
+      : "Use compact control";
+
+    if (persist) {
+      PreferenceStorage.writeBoolean(PREFERENCE_KEYS.collapsed, collapsed);
+    }
+  }
+
+  async function exportCurrentConversation() {
+    const conversationId = Core.conversationIdFromPath(location.pathname);
+    if (!conversationId) {
+      toast.show("Open a Gemini conversation before exporting.", "error");
+      return;
+    }
+
+    setPanelOpen(false);
+    exportButton.disabled = true;
+    exportButton.setAttribute("aria-label", "Exporting");
+    downloadIcon.textContent = "…";
+    exportLabel.textContent = "Exporting…";
+
+    try {
+      const history = await Core.collectHistoryPages((cursor) =>
+        fetchHistoryPage(conversationId, cursor),
+      );
+      const turns = Core.historyToChronologicalTurns(
+        history.rawTurnsNewestFirst,
+      );
+      const diagnostics = Core.validateConversation(turns);
+      const title = Core.cleanDocumentTitle(document.title);
+      const exportedAt = new Date().toISOString();
+      const markdown = Core.renderMarkdown({
+        title,
+        sourceUrl: location.href,
+        conversationId,
+        exportedAt,
+        turns,
+        diagnostics,
+        includeMetadata: preferences.includeMetadata,
+        includeOutline: preferences.includeOutline,
+      });
+      const filename = Core.safeFilename(title);
+
+      Utils.downloadTextFile(markdown, filename);
+      console.info("[Gemini Exporter] Export complete", {
+        filename,
+        pages: history.pages.length,
+        ...diagnostics,
+      });
+      toast.show(
+        `Exported ${turns.length} turns from ${history.pages.length} page${
+          history.pages.length === 1 ? "" : "s"
+        }. Validation: ${diagnostics.fingerprint}.`,
+      );
+    } catch (error) {
+      console.error("[Gemini Exporter] Export failed", error);
+      toast.show(
+        `Export stopped: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+        15_000,
+      );
+    } finally {
+      exportButton.disabled = false;
+      exportButton.setAttribute("aria-label", "Export Markdown");
+      downloadIcon.textContent = "↓";
+      exportLabel.textContent = "Export Markdown";
+    }
+  }
+
+  exportButton.addEventListener("click", exportCurrentConversation);
+  menuButton.addEventListener("click", () => {
+    setPanelOpen(panel.hidden);
+  });
+  compactToggle.addEventListener("click", () => {
+    setCollapsed(!preferences.collapsed);
+    setPanelOpen(false);
+  });
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (!event.composedPath().includes(host)) {
+        setPanelOpen(false);
+      }
+    },
+    true,
+  );
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setPanelOpen(false);
+    }
+  });
+
+  setCollapsed(preferences.collapsed, false);
+  document.documentElement.append(host);
 
   function syncRoute() {
-    ui.host.style.display = isConversationPage() ? "block" : "none";
+    host.style.display = isConversationPage() ? "block" : "none";
   }
 
   syncRoute();

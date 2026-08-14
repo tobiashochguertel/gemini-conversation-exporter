@@ -316,12 +316,14 @@ test("userscript clones request options into Firefox's page realm", () => {
     path.resolve(__dirname, "../src/userscript-main.js"),
     "utf8",
   );
-
-  assert.match(userscriptMain, /Utils\.cloneForPageRealm/);
-  assert.match(
-    userscriptMain,
-    /pageWindow\.fetch\(\s*endpoint\.toString\(\),\s*requestOptions/,
+  const historyFetcher = fs.readFileSync(
+    path.resolve(__dirname, "../src/history-fetcher.js"),
+    "utf8",
   );
+
+  assert.match(historyFetcher, /Utils\.cloneForPageRealm/);
+  assert.match(historyFetcher, /adapter\.pageWindow\.fetch/);
+  assert.match(userscriptMain, /pageWindow/);
 });
 
 test("userscript preserves the active account slot for history requests", () => {
@@ -330,6 +332,8 @@ test("userscript preserves the active account slot for history requests", () => 
     "utf8",
   );
 
+  assert.match(userscriptMain, /HistoryFetcher\.fetchPage/);
+  assert.match(userscriptMain, /createGeminiAdapter/);
   assert.match(
     userscriptMain,
     /Core\.accountScopedPath\(\s*location\.pathname,\s*"\/_\/BardChatUi\/data\/batchexecute"/,
@@ -414,7 +418,7 @@ test("built userscript contains inlined CSS without the raw token", () => {
   const built = fs.readFileSync(distPath, "utf8");
 
   assert.doesNotMatch(built, /__EXPORTER_UI_CSS__/);
-  assert.match(built, /style\.textContent\s*=\s*"/);
+  assert.match(built, /createShadowRoot\([^,]+,\s*"/);
   assert.match(built, /:host/);
 });
 
