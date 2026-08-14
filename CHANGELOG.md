@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 - 2026-08-14
+
+## Added
+
+- Log raw turn structure to the console at debug level to assist in inspecting conversation history payloads ([8223688](https://github.com/tobiashochguertel/gemini-conversation-exporter/commit/8223688bbdd652e5798ed487650cc61b429dbbfc))
+
 ## 0.3.1 - 2026-08-14
 
 Version 0.3.1 (patch release).
