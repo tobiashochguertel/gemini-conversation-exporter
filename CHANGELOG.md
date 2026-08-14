@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 - 2026-08-14
+
+## Added
+
+- **Generated file links**: Parse generated file metadata from Gemini extension data (`deed5c1`), replacing raw `[file-tag: ...]` placeholders in assistant responses with direct download links and adding a structured "Generated files" list (with filenames and MIME types) to Markdown exports and `generatedFiles` fields to JSON exports ([deed5c1](https://github.com/tobiashochguertel/gemini-conversation-exporter/commit/deed5c143c4a5e79002a93538a50461be4332b8b)).
+- **User-uploaded files support**: Extract uploaded file attachments into a collapsible section in Markdown exports and an `uploadedFiles` field in JSON exports ([deed5c1](https://github.com/tobiashochguertel/gemini-conversation-exporter/commit/deed5c143c4a5e79002a93538a50461be4332b8b)).
+
 ## 0.5.0 - 2026-08-14
 
 ## Added
