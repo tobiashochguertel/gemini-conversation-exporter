@@ -314,7 +314,7 @@ Each citation (`candidate[2][1][i]`) is a 4-element array:
 ### Thinking structure (`candidate[37]`)
 
 > **This field contains the model's reasoning/thinking data.**
-> It is **not currently extracted** by the exporter.
+> It is extracted by the exporter into `thinking.text` and `thinking.steps[]`.
 
 ```
 thinking = [
@@ -372,13 +372,13 @@ An array of step objects (11–13 steps observed). Each step is a
 | Candidate ID              | `candidate[0]`                | ✅         |
 | Assistant markdown        | `candidate[1][0]`             | ✅         |
 | Timestamp                 | `turn[4]`                     | ✅         |
-| **Model name**            | `turn[3][21]`                 | ❌         |
-| **Language**              | `turn[3][8]`                  | ❌         |
-| **Thinking text**         | `candidate[37][0][0]`         | ❌         |
-| **Thinking steps**        | `candidate[37][1]`            | ❌         |
-| **Web citations**         | `candidate[2][1]`             | ❌         |
-| **Extension/tool results**| `candidate[12]`               | ❌         |
-| **Feedback/ratings**      | `turn[3][1]`                  | ❌         |
+| **Model name**            | `turn[3][21]`                 | ✅         |
+| **Language**              | `turn[3][8]`                  | ✅         |
+| **Thinking text**         | `candidate[37][0][0]`         | ✅         |
+| **Thinking steps**        | `candidate[37][1]`            | ✅         |
+| **Web citations**         | `candidate[2][1]`             | ✅         |
+| **Extension/tool results**| `candidate[12]`               | ✅         |
+| **Feedback/ratings**      | `turn[3][1]`                  | ✅         |
 
 ## How to reproduce this analysis
 

@@ -36,6 +36,49 @@
   function createGeminiExporterCore() {
     "use strict";
 
+    /**
+     * @typedef {Object} Thinking
+     * @property {string} text          - Full thinking text as Markdown.
+     * @property {string[]} steps       - Thinking step texts (one per section).
+     */
+
+    /**
+     * @typedef {Object} WebCitation
+     * @property {string|null} text     - Citation display text (usually a Markdown link).
+     * @property {string|null} sourceId - Gemini source ID (e.g. `spp_…`).
+     */
+
+    /**
+     * @typedef {Object} ExtensionResult
+     * @property {number} index         - Original position in candidate[12].
+     * @property {*} raw                - Raw, opaque extension/tool payload.
+     */
+
+    /**
+     * @typedef {Object} FeedbackGroup
+     * @property {number} index         - Original position in turn[3][1].
+     * @property {*[]} raw              - Raw feedback/rating array.
+     */
+
+    /**
+     * @typedef {Object} Turn
+     * @property {string|null} conversationId    - Gemini conversation ID (`c_…`).
+     * @property {string|null} responseId        - Response ID (`r_…`).
+     * @property {string|null} parentResponseId  - Parent response ID.
+     * @property {string|null} candidateId       - Selected candidate ID (`rc_…`).
+     * @property {string|null} parentCandidateId - Parent candidate ID.
+     * @property {string} userMarkdown           - User prompt as Markdown.
+     * @property {string} assistantMarkdown      - Assistant response as Markdown.
+     * @property {string|null} timestamp         - ISO 8601 timestamp.
+     * @property {string} [model]                - Model name (e.g. "3.6 Flash Extended").
+     * @property {string} [language]             - Response language code (e.g. "DE").
+     * @property {Thinking} [thinking]           - Thinking/reasoning data.
+     * @property {WebCitation[]} [webCitations]  - Web search citations.
+     * @property {ExtensionResult[]} [extensions]- Extension/tool results.
+     * @property {FeedbackGroup[]} [feedback]    - Feedback/rating groups.
+     * @property {number} sourceIndex            - Zero-based index in the raw history.
+     */
+
     const HISTORY_RPC_ID = "hNvQHb";
 
     function invariant(condition, message) {
@@ -222,6 +265,103 @@
       );
     }
 
+    /**
+     * Extract thinking/reasoning data from a candidate.
+     * @param {Array|null} candidate - The raw candidate array (38 fields).
+     * @returns {Thinking|null} Thinking object, or null if no thinking data.
+     */
+    function extractThinking(candidate) {
+      const thinking = candidate?.[37];
+      if (!Array.isArray(thinking)) {
+        return null;
+      }
+
+      const text = thinking?.[0]?.[0];
+      const steps = Array.isArray(thinking?.[1]) ? thinking[1] : [];
+
+      return {
+        text: typeof text === "string" ? text : "",
+        steps: steps
+          .map((step) => {
+            if (!Array.isArray(step)) return null;
+            const stepText = step?.[0]?.[0];
+            return typeof stepText === "string" ? stepText : null;
+          })
+          .filter((s) => s !== null),
+      };
+    }
+
+    /**
+     * Extract web citations from a candidate.
+     * @param {Array|null} candidate - The raw candidate array (38 fields).
+     * @returns {WebCitation[]} Array of citation objects (empty if none).
+     */
+    function extractWebCitations(candidate) {
+      const citations = candidate?.[2]?.[1];
+      if (!Array.isArray(citations)) {
+        return [];
+      }
+
+      return citations
+        .map((citation) => {
+          if (!Array.isArray(citation)) return null;
+          // citation[0] is a 4-element array containing the citation markup;
+          // citation[0][0] holds the visible citation text (a markdown link).
+          const text = citation?.[0]?.[0];
+          const sourceId = citation?.[3];
+          return {
+            text: typeof text === "string" ? text : null,
+            sourceId: typeof sourceId === "string" ? sourceId : null,
+          };
+        })
+        .filter((c) => c !== null);
+    }
+
+    /**
+     * Extract extension/tool results from a candidate.
+     * @param {Array|null} candidate - The raw candidate array (38 fields).
+     * @returns {ExtensionResult[]} Array of extension entries (empty if none).
+     */
+    function extractExtensions(candidate) {
+      const extensions = candidate?.[12];
+      if (!Array.isArray(extensions)) {
+        return [];
+      }
+
+      return extensions
+        .map((ext, i) => {
+          if (ext === null || ext === undefined) return null;
+          // Extension entries are opaque; preserve their raw JSON form.
+          return { index: i, raw: ext };
+        })
+        .filter((e) => e !== null);
+    }
+
+    /**
+     * Extract feedback/rating groups from a raw turn.
+     * @param {Array} rawTurn - The raw turn array.
+     * @returns {FeedbackGroup[]|null} Array of feedback groups, or null.
+     */
+    function extractFeedback(rawTurn) {
+      const feedback = rawTurn?.[3]?.[1];
+      if (!Array.isArray(feedback)) {
+        return null;
+      }
+
+      return feedback
+        .map((group, i) => {
+          if (!Array.isArray(group)) return null;
+          return { index: i, raw: group };
+        })
+        .filter((g) => g !== null);
+    }
+
+    /**
+     * Extract a structured Turn from a raw Gemini history turn.
+     * @param {Array} rawTurn - The raw turn array from the hNvQHb response.
+     * @param {number} sourceIndex - Zero-based index in the raw history.
+     * @returns {Turn} Structured turn object.
+     */
     function extractTurn(rawTurn, sourceIndex) {
       invariant(
         Array.isArray(rawTurn),
@@ -231,6 +371,16 @@
       const userMarkdown = rawTurn?.[2]?.[0]?.[0];
       const candidate = extractSelectedCandidate(rawTurn);
       const assistantMarkdown = candidate?.[1]?.[0];
+      const turnMeta = rawTurn?.[3];
+
+      const model =
+        typeof turnMeta?.[21] === "string" ? turnMeta[21] : null;
+      const language =
+        typeof turnMeta?.[8] === "string" ? turnMeta[8] : null;
+      const thinking = extractThinking(candidate);
+      const webCitations = extractWebCitations(candidate);
+      const extensions = extractExtensions(candidate);
+      const feedback = extractFeedback(rawTurn);
 
       return {
         conversationId:
@@ -252,10 +402,23 @@
         assistantMarkdown:
           typeof assistantMarkdown === "string" ? assistantMarkdown : "",
         timestamp: timestampToIso(rawTurn?.[4]),
+        ...(model ? { model } : {}),
+        ...(language ? { language } : {}),
+        ...(thinking && thinking.text
+          ? { thinking }
+          : {}),
+        ...(webCitations.length > 0 ? { webCitations } : {}),
+        ...(extensions.length > 0 ? { extensions } : {}),
+        ...(feedback ? { feedback } : {}),
         sourceIndex,
       };
     }
 
+    /**
+     * Convert raw turns (newest-first) to chronological Turn objects.
+     * @param {Array[]} rawTurnsNewestFirst - Raw turns from the history API.
+     * @returns {Turn[]} Chronologically ordered Turn objects.
+     */
     function historyToChronologicalTurns(rawTurnsNewestFirst) {
       invariant(
         Array.isArray(rawTurnsNewestFirst),
@@ -297,6 +460,11 @@
       return (hash >>> 0).toString(16).padStart(8, "0");
     }
 
+    /**
+     * Validate a set of turns and compute diagnostics.
+     * @param {Turn[]} turns - Chronologically ordered turns.
+     * @returns {{fingerprint: string, duplicateBodies: *, timestampRegressions: *, markdownWarnings: *}} Diagnostics.
+     */
     function validateConversation(turns) {
       invariant(Array.isArray(turns), "Exported turns were missing.");
       invariant(turns.length > 0, "Gemini returned no conversation turns.");
@@ -447,6 +615,19 @@
       return String(text).replace(/([\\[\]])/g, "\\$1");
     }
 
+    /**
+     * Render turns as a Markdown document.
+     * @param {Object} opts
+     * @param {string} opts.title
+     * @param {string} opts.sourceUrl
+     * @param {string} opts.conversationId
+     * @param {string} opts.exportedAt
+     * @param {Turn[]} opts.turns
+     * @param {*} opts.diagnostics
+     * @param {boolean} [opts.includeMetadata=true]
+     * @param {boolean} [opts.includeOutline=true]
+     * @returns {string} Markdown document.
+     */
     function renderMarkdown({
       title,
       sourceUrl,
@@ -503,6 +684,8 @@
             turn.responseId ? `response=${turn.responseId}` : null,
             turn.candidateId ? `candidate=${turn.candidateId}` : null,
             turn.timestamp ? `timestamp=${turn.timestamp}` : null,
+            turn.model ? `model=${turn.model}` : null,
+            turn.language ? `lang=${turn.language}` : null,
           ].filter(Boolean);
 
           lines.push(
@@ -519,6 +702,25 @@
 
         lines.push(normalizeBlock(turn.userMarkdown), "");
 
+        if (turn.thinking && turn.thinking.text) {
+          if (includeOutline) {
+            lines.push("### Thinking", "");
+          } else {
+            lines.push("## Thinking", "");
+          }
+
+          lines.push(
+            "<details>",
+            "",
+            `<summary>Thinking process (${turn.thinking.steps.length || "?"} steps)</summary>`,
+            "",
+            normalizeBlock(turn.thinking.text),
+            "",
+            "</details>",
+            "",
+          );
+        }
+
         if (includeOutline) {
           lines.push("### Gemini", "");
         } else {
@@ -526,11 +728,38 @@
         }
 
         lines.push(normalizeBlock(turn.assistantMarkdown), "");
+
+        if (turn.webCitations && turn.webCitations.length > 0) {
+          if (includeOutline) {
+            lines.push("#### Citations", "");
+          } else {
+            lines.push("### Citations", "");
+          }
+
+          turn.webCitations.forEach((citation, i) => {
+            const text = citation.text || `Source ${i + 1}`;
+            const sid = citation.sourceId ? ` \`${citation.sourceId}\`` : "";
+            lines.push(`${i + 1}. ${text}${sid}`);
+          });
+          lines.push("");
+        }
       });
 
       return `${lines.join("\n").replace(/\n{4,}/g, "\n\n\n").trim()}\n`;
     }
 
+    /**
+     * Render turns as a JSON string.
+     * @param {Object} opts
+     * @param {string} opts.title
+     * @param {string} opts.sourceUrl
+     * @param {string} opts.conversationId
+     * @param {string} opts.exportedAt
+     * @param {Turn[]} opts.turns
+     * @param {*} opts.diagnostics
+     * @param {boolean} [opts.includeMetadata=true]
+     * @returns {string} JSON string (with trailing newline).
+     */
     function renderJson({
       title,
       sourceUrl,
@@ -557,6 +786,14 @@
             ? { parentCandidateId: turn.parentCandidateId }
             : {}),
           ...(turn.timestamp ? { timestamp: turn.timestamp } : {}),
+          ...(turn.model ? { model: turn.model } : {}),
+          ...(turn.language ? { language: turn.language } : {}),
+          ...(turn.thinking ? { thinking: turn.thinking } : {}),
+          ...(turn.webCitations
+            ? { webCitations: turn.webCitations }
+            : {}),
+          ...(turn.extensions ? { extensions: turn.extensions } : {}),
+          ...(turn.feedback ? { feedback: turn.feedback } : {}),
         })),
       };
 

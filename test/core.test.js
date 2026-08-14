@@ -16,30 +16,41 @@ function makeRawTurn({
   user,
   assistant,
   seconds,
+  model = null,
+  language = null,
+  thinking = null,
+  webCitations = null,
+  extensions = null,
+  feedback = null,
 }) {
+  // Build a 38-field candidate with optional thinking (37), citations (2), extensions (12)
+  const candidate = new Array(38).fill(null);
+  candidate[0] = candidateId;
+  candidate[1] = [assistant];
+  candidate[9] = "en";
+  if (webCitations) {
+    candidate[2] = [null, webCitations];
+  }
+  if (extensions) {
+    candidate[12] = extensions;
+  }
+  if (thinking) {
+    candidate[37] = thinking;
+  }
+
+  // Build a 26-field turnMeta with optional model (21), language (8), feedback (1)
+  const turnMeta = new Array(26).fill(null);
+  turnMeta[0] = [candidate];
+  turnMeta[3] = candidateId;
+  if (language) turnMeta[8] = language;
+  if (feedback) turnMeta[1] = feedback;
+  if (model) turnMeta[21] = model;
+
   return [
     [conversationId, responseId],
     [conversationId, parentResponseId, parentCandidateId],
     [[user], 2, null, 0, "model"],
-    [
-      [
-        [
-          candidateId,
-          [assistant],
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          "en",
-        ],
-      ],
-      null,
-      null,
-      candidateId,
-    ],
+    turnMeta,
     [seconds, 0],
   ];
 }
@@ -302,6 +313,247 @@ test("renderJson omits metadata when disabled", () => {
   assert.equal("exportedAt" in data, false);
   assert.equal("turnCount" in data, false);
   assert.equal("validation" in data, false);
+});
+
+test("extractTurn captures model name and language", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    model: "3.6 Flash Extended",
+    language: "DE",
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.equal(turns[0].model, "3.6 Flash Extended");
+  assert.equal(turns[0].language, "DE");
+});
+
+test("extractTurn captures thinking text and steps", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    thinking: [
+      ["**Step 1**\n\nReasoning about the question."],
+      [
+        [["**Step 1**\n\nReasoning about the question."], "", "", "", [], "", ""],
+        [["**Step 2**\n\nFormulating the answer."], "", "", "", [], "", ""],
+      ],
+    ],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.ok(turns[0].thinking);
+  assert.equal(turns[0].thinking.text, "**Step 1**\n\nReasoning about the question.");
+  assert.equal(turns[0].thinking.steps.length, 2);
+  assert.equal(turns[0].thinking.steps[0], "**Step 1**\n\nReasoning about the question.");
+  assert.equal(turns[0].thinking.steps[1], "**Step 2**\n\nFormulating the answer.");
+});
+
+test("extractTurn omits thinking when candidate has no thinking field", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.equal("thinking" in turns[0], false);
+});
+
+test("extractTurn captures web citations", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    webCitations: [
+      [["**[Example](https://example.com)**"], null, null, "spp_abc123"],
+    ],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.ok(turns[0].webCitations);
+  assert.equal(turns[0].webCitations.length, 1);
+  assert.equal(turns[0].webCitations[0].text, "**[Example](https://example.com)**");
+  assert.equal(turns[0].webCitations[0].sourceId, "spp_abc123");
+});
+
+test("extractTurn captures extension/tool results", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    extensions: [null, [{ type: "search", query: "test" }], null, null, null, null, null, []],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.ok(turns[0].extensions);
+  // Null entries are filtered out; non-null entries preserve their original index.
+  assert.equal(turns[0].extensions.length, 2);
+  assert.equal(turns[0].extensions[0].index, 1);
+  assert.equal(turns[0].extensions[1].index, 7);
+});
+
+test("extractTurn captures feedback/ratings", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    feedback: [["thumbs_up"], ["good_response"]],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  assert.ok(turns[0].feedback);
+  assert.equal(turns[0].feedback.length, 2);
+});
+
+test("renderJson includes thinking, model, and citations in output", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    model: "3.6 Flash Extended",
+    language: "DE",
+    thinking: [["Thinking text"], [[["Thinking text"], "", "", "", [], "", ""]]],
+    webCitations: [[["[Link](https://example.com)"], null, null, "spp_1"]],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const json = Core.renderJson({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+  const data = JSON.parse(json);
+  assert.equal(data.turns[0].model, "3.6 Flash Extended");
+  assert.equal(data.turns[0].language, "DE");
+  assert.equal(data.turns[0].thinking.text, "Thinking text");
+  assert.equal(data.turns[0].thinking.steps.length, 1);
+  assert.equal(data.turns[0].webCitations[0].sourceId, "spp_1");
+});
+
+test("renderJson omits thinking/model/citations when absent", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const json = Core.renderJson({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+  const data = JSON.parse(json);
+  assert.equal("thinking" in data.turns[0], false);
+  assert.equal("model" in data.turns[0], false);
+  assert.equal("language" in data.turns[0], false);
+  assert.equal("webCitations" in data.turns[0], false);
+  assert.equal("extensions" in data.turns[0], false);
+  assert.equal("feedback" in data.turns[0], false);
+});
+
+test("renderMarkdown includes thinking in a collapsible details block", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    model: "3.6 Flash Extended",
+    thinking: [
+      ["**Step 1**\n\nReasoning."],
+      [[["**Step 1**\n\nReasoning."], "", "", "", [], "", ""]],
+    ],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.ok(md.includes("### Thinking"));
+  assert.ok(md.includes("<details>"));
+  assert.ok(md.includes("<summary>Thinking process (1 steps)</summary>"));
+  assert.ok(md.includes("**Step 1**"));
+  assert.ok(md.includes("</details>"));
+  assert.ok(md.includes("model=3.6 Flash Extended"));
+});
+
+test("renderMarkdown includes web citations section", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+    webCitations: [
+      [["[Example](https://example.com)"], null, null, "spp_1"],
+      [["[Another](https://another.com)"], null, null, "spp_2"],
+    ],
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.ok(md.includes("#### Citations"));
+  assert.ok(md.includes("[Example](https://example.com)"));
+  assert.ok(md.includes("`spp_1`"));
+  assert.ok(md.includes("[Another](https://another.com)"));
+});
+
+test("renderMarkdown omits thinking and citations sections when absent", () => {
+  const raw = makeRawTurn({
+    responseId: "r_1",
+    candidateId: "rc_1",
+    user: "Hello",
+    assistant: "Hi there",
+    seconds: 1_700_000_000,
+  });
+  const turns = Core.historyToChronologicalTurns([raw]);
+  const diagnostics = Core.validateConversation(turns);
+  const md = Core.renderMarkdown({
+    title: "Test",
+    sourceUrl: "https://gemini.google.com/app/test",
+    conversationId: "c_test",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    turns,
+    diagnostics,
+  });
+
+  assert.ok(!md.includes("### Thinking"));
+  assert.ok(!md.includes("<details>"));
+  assert.ok(!md.includes("Citations"));
 });
 
 test("extracts conversation IDs from default and account-scoped Gemini URLs", () => {
