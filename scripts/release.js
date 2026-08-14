@@ -163,7 +163,7 @@ fs.writeFileSync(changelogPath, updatedChangelog, "utf8");
 
 console.log("release: committing...");
 run(`git add package.json CHANGELOG.md dist/gemini-conversation-exporter.user.js`);
-run(`git commit -m "Release v${newVersion}"`);
+run(`git commit -m "chore: release v${newVersion}"`, { env: { ...process.env, HK: "0" } });
 
 console.log(`release: tagging ${tag}...`);
 run(`git tag ${tag}`);
