@@ -591,6 +591,127 @@
   },
 );
 
+/**
+ * Generic Tampermonkey preference utilities.
+ *
+ * Provides safe wrappers around GM_getValue / GM_setValue for boolean
+ * preferences with graceful fallback when the GM APIs are unavailable
+ * (e.g. running outside Tampermonkey).
+ */
+
+const PreferenceStorage = Object.freeze({
+  /**
+   * Read a boolean preference from Tampermonkey storage.
+   *
+   * @param {string} key - The preference key.
+   * @param {boolean} fallback - Value returned if GM_getValue is unavailable
+   *   or the stored value is not a boolean.
+   * @returns {boolean}
+   */
+  readBoolean(key, fallback) {
+    if (typeof GM_getValue !== "function") {
+      return fallback;
+    }
+
+    try {
+      const value = GM_getValue(key, fallback);
+      return typeof value === "boolean" ? value : fallback;
+    } catch (error) {
+      console.warn("[PreferenceStorage] Could not read preference", key, error);
+      return fallback;
+    }
+  },
+
+  /**
+   * Write a boolean preference to Tampermonkey storage.
+   *
+   * @param {string} key - The preference key.
+   * @param {boolean} value - The value to store.
+   */
+  writeBoolean(key, value) {
+    if (typeof GM_setValue !== "function") {
+      return;
+    }
+
+    try {
+      GM_setValue(key, Boolean(value));
+    } catch (error) {
+      console.warn("[PreferenceStorage] Could not save preference", key, error);
+    }
+  },
+});
+
+/**
+ * Generic browser and Tampermonkey utility functions.
+ *
+ * These helpers are not specific to any particular site — they provide
+ * cross-realm cloning, random ID generation, and file download support.
+ */
+
+const Utils = Object.freeze({
+  /**
+   * Generate a random 7-digit request ID string.
+   *
+   * Used for Google RPC request correlation. Not cryptographically unique.
+   *
+   * @returns {string}
+   */
+  makeRequestId() {
+    return String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
+  },
+
+  /**
+   * Clone a value into the page realm for Firefox cross-realm safety.
+   *
+   * Firefox's security boundary requires objects passed to page APIs
+   * (e.g. fetch options) to originate from the page realm. `cloneInto`
+   * is a Firefox/Tampermonkey global; on other browsers it is undefined
+   * and the value is returned as-is.
+   *
+   * @param {*} value - The value to clone.
+   * @param {object} pageWindow - The page's window object (unsafeWindow).
+   * @returns {*}
+   */
+  cloneForPageRealm(value, pageWindow) {
+    return typeof cloneInto === "function"
+      ? cloneInto(value, pageWindow)
+      : value;
+  },
+
+  /**
+   * Trigger a browser download of a text file.
+   *
+   * Creates a Blob, generates an object URL, programmatically clicks
+   * a temporary anchor element, and revokes the URL after 30 seconds.
+   *
+   * @param {string} content - The file content.
+   * @param {string} filename - The download filename.
+   * @param {string} [mimeType="text/markdown;charset=utf-8"] - The MIME type.
+   */
+  downloadTextFile(content, filename, mimeType = "text/markdown;charset=utf-8") {
+    const blob = new Blob([content], { type: mimeType });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.append(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+  },
+});
+
+const ROOT_ID = "gemini-web-exporter-root";
+const HISTORY_PAGE_SIZE = 50;
+const PREFERENCE_KEYS = Object.freeze({
+  collapsed: "ui.collapsed",
+  includeMetadata: "export.includeMetadata",
+  includeOutline: "export.includeOutline",
+});
+
 (function runGeminiExporterUserscript() {
   "use strict";
 
@@ -599,13 +720,6 @@
     throw new Error("Gemini exporter core failed to initialize.");
   }
 
-  const ROOT_ID = "gemini-web-exporter-root";
-  const HISTORY_PAGE_SIZE = 50;
-  const PREFERENCE_KEYS = Object.freeze({
-    collapsed: "ui.collapsed",
-    includeMetadata: "export.includeMetadata",
-    includeOutline: "export.includeOutline",
-  });
   const pageWindow =
     typeof unsafeWindow !== "undefined" ? unsafeWindow : globalThis;
 
@@ -631,42 +745,6 @@
     return config;
   }
 
-  function makeRequestId() {
-    return String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
-  }
-
-  function cloneForPageRealm(value) {
-    return typeof cloneInto === "function"
-      ? cloneInto(value, pageWindow)
-      : value;
-  }
-
-  function readBooleanPreference(key, fallback) {
-    if (typeof GM_getValue !== "function") {
-      return fallback;
-    }
-
-    try {
-      const value = GM_getValue(key, fallback);
-      return typeof value === "boolean" ? value : fallback;
-    } catch (error) {
-      console.warn("[Gemini Exporter] Could not read preference", key, error);
-      return fallback;
-    }
-  }
-
-  function writeBooleanPreference(key, value) {
-    if (typeof GM_setValue !== "function") {
-      return;
-    }
-
-    try {
-      GM_setValue(key, Boolean(value));
-    } catch (error) {
-      console.warn("[Gemini Exporter] Could not save preference", key, error);
-    }
-  }
-
   async function fetchHistoryPage(conversationId, cursor) {
     const config = getGeminiConfig();
     const query = new URLSearchParams({
@@ -675,7 +753,7 @@
       bl: config.cfb2h,
       "f.sid": config.FdrFJe,
       hl: (document.documentElement.lang || "en").split("-")[0],
-      _reqid: makeRequestId(),
+      _reqid: Utils.makeRequestId(),
       rt: "c",
     });
     const pageId = new URLSearchParams(location.search).get("pageId");
@@ -709,7 +787,7 @@
     const endpoint = new URL(endpointPath, location.origin);
     endpoint.search = query.toString();
 
-    const requestOptions = cloneForPageRealm({
+    const requestOptions = Utils.cloneForPageRealm({
       method: "POST",
       credentials: "same-origin",
       headers: {
@@ -733,31 +811,14 @@
     return text;
   }
 
-  function downloadMarkdown(markdown, filename) {
-    const blob = new Blob([markdown], {
-      type: "text/markdown;charset=utf-8",
-    });
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = objectUrl;
-    link.download = filename;
-    link.style.display = "none";
-    document.body.append(link);
-    link.click();
-    link.remove();
-
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
-  }
-
   function createUi() {
     const preferences = {
-      collapsed: readBooleanPreference(PREFERENCE_KEYS.collapsed, false),
-      includeMetadata: readBooleanPreference(
+      collapsed: PreferenceStorage.readBoolean(PREFERENCE_KEYS.collapsed, false),
+      includeMetadata: PreferenceStorage.readBoolean(
         PREFERENCE_KEYS.includeMetadata,
         true,
       ),
-      includeOutline: readBooleanPreference(
+      includeOutline: PreferenceStorage.readBoolean(
         PREFERENCE_KEYS.includeOutline,
         true,
       ),
@@ -822,7 +883,7 @@
       checked: preferences.includeOutline,
       onChange(value) {
         preferences.includeOutline = value;
-        writeBooleanPreference(PREFERENCE_KEYS.includeOutline, value);
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
       },
     });
     const metadataOption = createOption({
@@ -831,7 +892,7 @@
       checked: preferences.includeMetadata,
       onChange(value) {
         preferences.includeMetadata = value;
-        writeBooleanPreference(PREFERENCE_KEYS.includeMetadata, value);
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
       },
     });
 
@@ -902,7 +963,7 @@
         : "Use compact control";
 
       if (persist) {
-        writeBooleanPreference(PREFERENCE_KEYS.collapsed, collapsed);
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.collapsed, collapsed);
       }
     }
 
@@ -941,7 +1002,7 @@
         });
         const filename = Core.safeFilename(title);
 
-        downloadMarkdown(markdown, filename);
+        Utils.downloadTextFile(markdown, filename);
         console.info("[Gemini Exporter] Export complete", {
           filename,
           pages: history.pages.length,

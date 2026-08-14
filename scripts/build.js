@@ -38,6 +38,9 @@ const metadata = `// ==UserScript==
 // ==/UserScript==
 `;
 
+const preferenceStoragePath = path.join(projectRoot, "src", "preference-storage.js");
+const utilsPath = path.join(projectRoot, "src", "utils.js");
+
 const cssContent = fs.readFileSync(cssPath, "utf8").trim();
 const mainContent = fs.readFileSync(mainPath, "utf8")
   .replace("__EXPORTER_UI_CSS__", JSON.stringify(cssContent));
@@ -46,6 +49,10 @@ const output = [
   metadata.trimEnd(),
   "",
   fs.readFileSync(corePath, "utf8").trim(),
+  "",
+  fs.readFileSync(preferenceStoragePath, "utf8").trim(),
+  "",
+  fs.readFileSync(utilsPath, "utf8").trim(),
   "",
   mainContent.trim(),
   "",

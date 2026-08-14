@@ -1,3 +1,11 @@
+const ROOT_ID = "gemini-web-exporter-root";
+const HISTORY_PAGE_SIZE = 50;
+const PREFERENCE_KEYS = Object.freeze({
+  collapsed: "ui.collapsed",
+  includeMetadata: "export.includeMetadata",
+  includeOutline: "export.includeOutline",
+});
+
 (function runGeminiExporterUserscript() {
   "use strict";
 
@@ -6,13 +14,6 @@
     throw new Error("Gemini exporter core failed to initialize.");
   }
 
-  const ROOT_ID = "gemini-web-exporter-root";
-  const HISTORY_PAGE_SIZE = 50;
-  const PREFERENCE_KEYS = Object.freeze({
-    collapsed: "ui.collapsed",
-    includeMetadata: "export.includeMetadata",
-    includeOutline: "export.includeOutline",
-  });
   const pageWindow =
     typeof unsafeWindow !== "undefined" ? unsafeWindow : globalThis;
 
@@ -38,42 +39,6 @@
     return config;
   }
 
-  function makeRequestId() {
-    return String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
-  }
-
-  function cloneForPageRealm(value) {
-    return typeof cloneInto === "function"
-      ? cloneInto(value, pageWindow)
-      : value;
-  }
-
-  function readBooleanPreference(key, fallback) {
-    if (typeof GM_getValue !== "function") {
-      return fallback;
-    }
-
-    try {
-      const value = GM_getValue(key, fallback);
-      return typeof value === "boolean" ? value : fallback;
-    } catch (error) {
-      console.warn("[Gemini Exporter] Could not read preference", key, error);
-      return fallback;
-    }
-  }
-
-  function writeBooleanPreference(key, value) {
-    if (typeof GM_setValue !== "function") {
-      return;
-    }
-
-    try {
-      GM_setValue(key, Boolean(value));
-    } catch (error) {
-      console.warn("[Gemini Exporter] Could not save preference", key, error);
-    }
-  }
-
   async function fetchHistoryPage(conversationId, cursor) {
     const config = getGeminiConfig();
     const query = new URLSearchParams({
@@ -82,7 +47,7 @@
       bl: config.cfb2h,
       "f.sid": config.FdrFJe,
       hl: (document.documentElement.lang || "en").split("-")[0],
-      _reqid: makeRequestId(),
+      _reqid: Utils.makeRequestId(),
       rt: "c",
     });
     const pageId = new URLSearchParams(location.search).get("pageId");
@@ -116,7 +81,7 @@
     const endpoint = new URL(endpointPath, location.origin);
     endpoint.search = query.toString();
 
-    const requestOptions = cloneForPageRealm({
+    const requestOptions = Utils.cloneForPageRealm({
       method: "POST",
       credentials: "same-origin",
       headers: {
@@ -140,31 +105,14 @@
     return text;
   }
 
-  function downloadMarkdown(markdown, filename) {
-    const blob = new Blob([markdown], {
-      type: "text/markdown;charset=utf-8",
-    });
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = objectUrl;
-    link.download = filename;
-    link.style.display = "none";
-    document.body.append(link);
-    link.click();
-    link.remove();
-
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
-  }
-
   function createUi() {
     const preferences = {
-      collapsed: readBooleanPreference(PREFERENCE_KEYS.collapsed, false),
-      includeMetadata: readBooleanPreference(
+      collapsed: PreferenceStorage.readBoolean(PREFERENCE_KEYS.collapsed, false),
+      includeMetadata: PreferenceStorage.readBoolean(
         PREFERENCE_KEYS.includeMetadata,
         true,
       ),
-      includeOutline: readBooleanPreference(
+      includeOutline: PreferenceStorage.readBoolean(
         PREFERENCE_KEYS.includeOutline,
         true,
       ),
@@ -229,7 +177,7 @@
       checked: preferences.includeOutline,
       onChange(value) {
         preferences.includeOutline = value;
-        writeBooleanPreference(PREFERENCE_KEYS.includeOutline, value);
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
       },
     });
     const metadataOption = createOption({
@@ -238,7 +186,7 @@
       checked: preferences.includeMetadata,
       onChange(value) {
         preferences.includeMetadata = value;
-        writeBooleanPreference(PREFERENCE_KEYS.includeMetadata, value);
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
       },
     });
 
@@ -309,7 +257,7 @@
         : "Use compact control";
 
       if (persist) {
-        writeBooleanPreference(PREFERENCE_KEYS.collapsed, collapsed);
+        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.collapsed, collapsed);
       }
     }
 
@@ -348,7 +296,7 @@
         });
         const filename = Core.safeFilename(title);
 
-        downloadMarkdown(markdown, filename);
+        Utils.downloadTextFile(markdown, filename);
         console.info("[Gemini Exporter] Export complete", {
           filename,
           pages: history.pages.length,

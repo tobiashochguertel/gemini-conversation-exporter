@@ -299,8 +299,8 @@ test("userscript provides persistent on-page export preferences", () => {
     "utf8",
   );
 
-  assert.match(userscriptMain, /GM_getValue/);
-  assert.match(userscriptMain, /GM_setValue/);
+  assert.match(userscriptMain, /PreferenceStorage\.readBoolean/);
+  assert.match(userscriptMain, /PreferenceStorage\.writeBoolean/);
   assert.match(userscriptMain, /Conversation outline/);
   assert.match(userscriptMain, /Export metadata/);
   assert.match(userscriptMain, /Use compact control/);
@@ -308,6 +308,7 @@ test("userscript provides persistent on-page export preferences", () => {
   assert.doesNotMatch(buildScript, /GM_registerMenuCommand/);
   assert.match(buildScript, /@grant\s+GM_getValue/);
   assert.match(buildScript, /@grant\s+GM_setValue/);
+  assert.match(buildScript, /preference-storage\.js/);
 });
 
 test("userscript clones request options into Firefox's page realm", () => {
@@ -316,8 +317,7 @@ test("userscript clones request options into Firefox's page realm", () => {
     "utf8",
   );
 
-  assert.match(userscriptMain, /typeof cloneInto === "function"/);
-  assert.match(userscriptMain, /cloneInto\(value, pageWindow\)/);
+  assert.match(userscriptMain, /Utils\.cloneForPageRealm/);
   assert.match(
     userscriptMain,
     /pageWindow\.fetch\(\s*endpoint\.toString\(\),\s*requestOptions/,
