@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Gemini Conversation Exporter
 // @namespace    local.gemini-web-exporter
-// @version      0.1.8
+// @version      0.2.0
 // @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
-// @author       dikelps
+// @author       tobiashochguertel
 // @license      MIT
-// @homepageURL  https://github.com/dikelps/gemini-conversation-exporter
-// @supportURL   https://github.com/dikelps/gemini-conversation-exporter/issues
+// @homepageURL  https://github.com/tobiashochguertel/gemini-conversation-exporter
+// @supportURL   https://github.com/tobiashochguertel/gemini-conversation-exporter/issues
 // @match        https://gemini.google.com/*
 // @match        https://gemini.google.com/app
 // @match        https://gemini.google.com/app/*
@@ -761,6 +761,227 @@ const HistoryFetcher = Object.freeze({
   },
 });
 
+/**
+ * Generic Shadow DOM UI builders for userscripts.
+ *
+ * All functions are pure DOM construction — no site-specific labels,
+ * preference keys, or business logic. Callers pass in all text and
+ * behavior via parameters so the same builders can be reused across
+ * different userscripts.
+ */
+
+const Ui = Object.freeze({
+  /**
+   * Create a Shadow DOM host with an injected stylesheet.
+   *
+   * @param {string} rootId - ID for the host element.
+   * @param {string} cssText - CSS content for the shadow root.
+   * @returns {{ host: HTMLElement, shadow: ShadowRoot }}
+   */
+  createShadowRoot(rootId, cssText) {
+    const host = document.createElement("div");
+    host.id = rootId;
+    const shadow = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = cssText;
+    shadow.append(style);
+    return { host, shadow };
+  },
+
+  /**
+   * Create a toast notification element with auto-hide.
+   *
+   * @returns {{ element: HTMLElement, show: (message: string, kind?: string, duration?: number) => void }}
+   */
+  createToast() {
+    const element = document.createElement("div");
+    element.className = "toast";
+    element.setAttribute("role", "status");
+    element.setAttribute("aria-live", "polite");
+    let timer = null;
+
+    function show(message, kind = "success", duration = 8_000) {
+      clearTimeout(timer);
+      element.textContent = message;
+      element.dataset.kind = kind;
+      element.style.display = "block";
+      timer = setTimeout(() => {
+        element.style.display = "none";
+      }, duration);
+    }
+
+    return { element, show };
+  },
+
+  /**
+   * Create a labeled checkbox option row.
+   *
+   * @param {object} opts
+   * @param {string} opts.label - Option label text.
+   * @param {string} opts.description - Option description text.
+   * @param {boolean} opts.checked - Initial checked state.
+   * @param {(value: boolean) => void} opts.onChange - Change callback.
+   * @returns {{ option: HTMLElement, input: HTMLInputElement }}
+   */
+  createCheckboxOption({ label, description, checked, onChange }) {
+    const option = document.createElement("label");
+    option.className = "option";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    input.addEventListener("change", () => onChange(input.checked));
+
+    const copy = document.createElement("span");
+    copy.className = "option-copy";
+
+    const optionLabel = document.createElement("span");
+    optionLabel.className = "option-label";
+    optionLabel.textContent = label;
+
+    const optionDescription = document.createElement("span");
+    optionDescription.className = "option-description";
+    optionDescription.textContent = description;
+
+    copy.append(optionLabel, optionDescription);
+    option.append(input, copy);
+    return { option, input };
+  },
+
+  /**
+   * Create an export control bar with a primary button and menu button.
+   *
+   * Returns state setters that encapsulate DOM manipulation:
+   *   - setMenuExpanded(expanded): toggle aria-expanded on the menu button
+   *   - setBusy(busy, { icon, label, ariaLabel }): disable button + swap icon/label
+   *   - setCollapsed(collapsed, { title }): toggle dataset.collapsed + button title
+   *
+   * @param {object} opts
+   * @param {string} opts.buttonLabel - Primary button text.
+   * @param {string} opts.buttonAriaLabel - Primary button aria-label.
+   * @param {string} opts.menuAriaLabel - Menu button aria-label.
+   * @param {string} [opts.buttonIcon="↓"] - Icon character for the button.
+   * @param {string} [opts.menuIcon="⋮"] - Icon character for the menu button.
+   * @returns {{ control, exportButton, menuButton, downloadIcon, exportLabel, setMenuExpanded, setBusy, setCollapsed }}
+   */
+  createExportControl({
+    buttonLabel,
+    buttonAriaLabel,
+    menuAriaLabel,
+    buttonIcon = "↓",
+    menuIcon = "⋮",
+  }) {
+    const control = document.createElement("div");
+    control.className = "control";
+
+    const exportButton = document.createElement("button");
+    exportButton.type = "button";
+    exportButton.className = "export-button";
+    exportButton.setAttribute("aria-label", buttonAriaLabel);
+
+    const downloadIcon = document.createElement("span");
+    downloadIcon.className = "download-icon";
+    downloadIcon.setAttribute("aria-hidden", "true");
+    downloadIcon.textContent = buttonIcon;
+
+    const exportLabel = document.createElement("span");
+    exportLabel.className = "export-label";
+    exportLabel.textContent = buttonLabel;
+
+    exportButton.append(downloadIcon, exportLabel);
+
+    const menuButton = document.createElement("button");
+    menuButton.type = "button";
+    menuButton.className = "menu-button";
+    menuButton.textContent = menuIcon;
+    menuButton.setAttribute("aria-label", menuAriaLabel);
+    menuButton.setAttribute("aria-haspopup", "dialog");
+    menuButton.setAttribute("aria-expanded", "false");
+
+    control.append(exportButton, menuButton);
+
+    function setMenuExpanded(expanded) {
+      menuButton.setAttribute("aria-expanded", String(expanded));
+    }
+
+    function setBusy(busy, { icon, label, ariaLabel } = {}) {
+      exportButton.disabled = busy;
+      if (icon !== undefined) downloadIcon.textContent = icon;
+      if (label !== undefined) exportLabel.textContent = label;
+      if (ariaLabel !== undefined) exportButton.setAttribute("aria-label", ariaLabel);
+    }
+
+    function setCollapsed(collapsed, { title } = {}) {
+      control.dataset.collapsed = String(collapsed);
+      exportButton.title = collapsed ? (title ?? "") : "";
+    }
+
+    return { control, exportButton, menuButton, downloadIcon, exportLabel, setMenuExpanded, setBusy, setCollapsed };
+  },
+
+  /**
+   * Create a vertical stack container and append children to it.
+   *
+   * @param {string} className - CSS class for the stack element.
+   * @param {...HTMLElement} children - Elements to append.
+   * @returns {HTMLElement}
+   */
+  createStack(className, ...children) {
+    const stack = document.createElement("div");
+    stack.className = className;
+    stack.append(...children);
+    return stack;
+  },
+
+  /**
+   * Create an options panel with heading, checkbox options, and a compact toggle.
+   *
+   * Returns state setters:
+   *   - setOpen(open): toggle panel.hidden
+   *   - setCompactToggleLabel(text): set compactToggle.textContent
+   *
+   * @param {object} opts
+   * @param {string} opts.heading - Panel heading text.
+   * @param {string} opts.ariaLabel - Panel aria-label.
+   * @param {Array<{ label: string, description: string, checked: boolean, onChange: (value: boolean) => void }>} opts.options - Checkbox option configs.
+   * @returns {{ panel, compactToggle, setOpen, setCompactToggleLabel }}
+   */
+  createOptionsPanel({ heading, ariaLabel, options }) {
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.hidden = true;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", ariaLabel);
+
+    const panelHeading = document.createElement("p");
+    panelHeading.className = "panel-heading";
+    panelHeading.textContent = heading;
+
+    panel.append(panelHeading);
+
+    for (const optionConfig of options) {
+      const { option } = Ui.createCheckboxOption(optionConfig);
+      panel.append(option);
+    }
+
+    const compactToggle = document.createElement("button");
+    compactToggle.type = "button";
+    compactToggle.className = "compact-toggle";
+
+    panel.append(compactToggle);
+
+    function setOpen(open) {
+      panel.hidden = !open;
+    }
+
+    function setCompactToggleLabel(text) {
+      compactToggle.textContent = text;
+    }
+
+    return { panel, compactToggle, setOpen, setCompactToggleLabel };
+  },
+});
+
 const ROOT_ID = "gemini-web-exporter-root";
 const HISTORY_PAGE_SIZE = 50;
 const PREFERENCE_KEYS = Object.freeze({
@@ -880,133 +1101,6 @@ const PREFERENCE_KEYS = Object.freeze({
     return HistoryFetcher.fetchPage(adapter, cursor);
   }
 
-  // ── UI builder functions ──────────────────────────────────────────────
-
-  function createShadowRoot(rootId, cssText) {
-    const host = document.createElement("div");
-    host.id = rootId;
-    const shadow = host.attachShadow({ mode: "open" });
-    const style = document.createElement("style");
-    style.textContent = cssText;
-    shadow.append(style);
-    return { host, shadow };
-  }
-
-  function createToast() {
-    const element = document.createElement("div");
-    element.className = "toast";
-    element.setAttribute("role", "status");
-    element.setAttribute("aria-live", "polite");
-    let timer = null;
-
-    function show(message, kind = "success", duration = 8_000) {
-      clearTimeout(timer);
-      element.textContent = message;
-      element.dataset.kind = kind;
-      element.style.display = "block";
-      timer = setTimeout(() => {
-        element.style.display = "none";
-      }, duration);
-    }
-
-    return { element, show };
-  }
-
-  function createCheckboxOption({ label, description, checked, onChange }) {
-    const option = document.createElement("label");
-    option.className = "option";
-
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = checked;
-    input.addEventListener("change", () => onChange(input.checked));
-
-    const copy = document.createElement("span");
-    copy.className = "option-copy";
-
-    const optionLabel = document.createElement("span");
-    optionLabel.className = "option-label";
-    optionLabel.textContent = label;
-
-    const optionDescription = document.createElement("span");
-    optionDescription.className = "option-description";
-    optionDescription.textContent = description;
-
-    copy.append(optionLabel, optionDescription);
-    option.append(input, copy);
-    return { option, input };
-  }
-
-  function createExportControl() {
-    const control = document.createElement("div");
-    control.className = "control";
-
-    const exportButton = document.createElement("button");
-    exportButton.type = "button";
-    exportButton.className = "export-button";
-    exportButton.setAttribute("aria-label", "Export Markdown");
-
-    const downloadIcon = document.createElement("span");
-    downloadIcon.className = "download-icon";
-    downloadIcon.setAttribute("aria-hidden", "true");
-    downloadIcon.textContent = "↓";
-
-    const exportLabel = document.createElement("span");
-    exportLabel.className = "export-label";
-    exportLabel.textContent = "Export Markdown";
-
-    exportButton.append(downloadIcon, exportLabel);
-
-    const menuButton = document.createElement("button");
-    menuButton.type = "button";
-    menuButton.className = "menu-button";
-    menuButton.textContent = "⋮";
-    menuButton.setAttribute("aria-label", "Export options");
-    menuButton.setAttribute("aria-haspopup", "dialog");
-    menuButton.setAttribute("aria-expanded", "false");
-
-    control.append(exportButton, menuButton);
-    return { control, exportButton, menuButton, downloadIcon, exportLabel };
-  }
-
-  function createOptionsPanel(preferences) {
-    const panel = document.createElement("div");
-    panel.className = "panel";
-    panel.hidden = true;
-    panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-label", "Export options");
-
-    const panelHeading = document.createElement("p");
-    panelHeading.className = "panel-heading";
-    panelHeading.textContent = "Export options";
-
-    const outlineOption = createCheckboxOption({
-      label: "Conversation outline",
-      description: "Linked turn list with short prompt previews",
-      checked: preferences.includeOutline,
-      onChange(value) {
-        preferences.includeOutline = value;
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
-      },
-    });
-    const metadataOption = createCheckboxOption({
-      label: "Export metadata",
-      description: "Source, export details, validation and turn IDs",
-      checked: preferences.includeMetadata,
-      onChange(value) {
-        preferences.includeMetadata = value;
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
-      },
-    });
-
-    const compactToggle = document.createElement("button");
-    compactToggle.type = "button";
-    compactToggle.className = "compact-toggle";
-
-    panel.append(panelHeading, outlineOption.option, metadataOption.option, compactToggle);
-    return { panel, compactToggle };
-  }
-
   // ── UI assembly + export logic ─────────────────────────────────────────
 
   const preferences = {
@@ -1021,29 +1115,52 @@ const PREFERENCE_KEYS = Object.freeze({
     ),
   };
 
-  const { host, shadow } = createShadowRoot(ROOT_ID, ":host {\r\n  all: initial;\r\n  position: fixed;\r\n  right: 22px;\r\n  bottom: 22px;\r\n  z-index: 2147483647;\r\n  font-family: \"Google Sans\", system-ui, -apple-system, sans-serif;\r\n}\r\n\r\n.stack {\r\n  display: flex;\r\n  flex-direction: column;\r\n  align-items: flex-end;\r\n  gap: 10px;\r\n}\r\n\r\nbutton,\r\ninput {\r\n  font: inherit;\r\n}\r\n\r\nbutton {\r\n  appearance: none;\r\n  border: 0;\r\n  cursor: pointer;\r\n}\r\n\r\n.control {\r\n  display: flex;\r\n  overflow: hidden;\r\n  border: 1px solid rgba(255, 255, 255, 0.22);\r\n  border-radius: 999px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.export-button,\r\n.menu-button {\r\n  display: inline-flex;\r\n  min-height: 42px;\r\n  align-items: center;\r\n  justify-content: center;\r\n  background: transparent;\r\n  color: inherit;\r\n}\r\n\r\n.export-button {\r\n  gap: 8px;\r\n  min-width: 142px;\r\n  padding: 0 16px;\r\n  font-weight: 650;\r\n  white-space: nowrap;\r\n  transition: min-width 120ms ease, padding 120ms ease;\r\n}\r\n\r\n.download-icon {\r\n  font-size: 18px;\r\n  line-height: 1;\r\n}\r\n\r\n.menu-button {\r\n  width: 38px;\r\n  border-left: 1px solid rgba(255, 255, 255, 0.16);\r\n  font-size: 21px;\r\n  line-height: 1;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-button {\r\n  min-width: 42px;\r\n  padding: 0 12px;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-label {\r\n  display: none;\r\n}\r\n\r\n.export-button:hover,\r\n.menu-button:hover {\r\n  background: #303030;\r\n}\r\n\r\nbutton:focus-visible {\r\n  outline: 3px solid #a8c7fa;\r\n  outline-offset: -3px;\r\n}\r\n\r\nbutton:disabled {\r\n  cursor: progress;\r\n  opacity: 0.72;\r\n}\r\n\r\n.panel {\r\n  box-sizing: border-box;\r\n  width: min(270px, calc(100vw - 32px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 14px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  padding: 14px;\r\n  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.34);\r\n}\r\n\r\n.panel[hidden] {\r\n  display: none;\r\n}\r\n\r\n.panel-heading {\r\n  margin: 0 0 10px;\r\n  font-size: 13px;\r\n  font-weight: 700;\r\n  letter-spacing: 0.01em;\r\n}\r\n\r\n.option {\r\n  display: grid;\r\n  grid-template-columns: 20px minmax(0, 1fr);\r\n  gap: 9px;\r\n  align-items: start;\r\n  border-radius: 9px;\r\n  cursor: pointer;\r\n  padding: 8px 6px;\r\n}\r\n\r\n.option:hover {\r\n  background: rgba(255, 255, 255, 0.07);\r\n}\r\n\r\n.option input {\r\n  width: 16px;\r\n  height: 16px;\r\n  margin: 1px 0 0;\r\n  accent-color: #a8c7fa;\r\n}\r\n\r\n.option-copy {\r\n  display: flex;\r\n  min-width: 0;\r\n  flex-direction: column;\r\n  gap: 3px;\r\n}\r\n\r\n.option-label {\r\n  font-size: 13px;\r\n  font-weight: 650;\r\n  line-height: 1.2;\r\n}\r\n\r\n.option-description {\r\n  color: #c7c7c7;\r\n  font-size: 11px;\r\n  font-weight: 450;\r\n  line-height: 1.35;\r\n}\r\n\r\n.compact-toggle {\r\n  width: 100%;\r\n  margin-top: 10px;\r\n  border-top: 1px solid rgba(255, 255, 255, 0.14);\r\n  background: transparent;\r\n  color: #a8c7fa;\r\n  padding: 12px 6px 3px;\r\n  text-align: left;\r\n  font-size: 12px;\r\n  font-weight: 650;\r\n}\r\n\r\n.compact-toggle:hover {\r\n  color: #d3e3fd;\r\n}\r\n\r\n.toast {\r\n  box-sizing: border-box;\r\n  display: none;\r\n  max-width: min(420px, calc(100vw - 44px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 12px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  font: 500 13px/1.45 system-ui, -apple-system, sans-serif;\r\n  padding: 11px 13px;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.toast[data-kind=\"error\"] {\r\n  background: #8c1d18;\r\n}\r\n\r\n@media (max-width: 520px) {\r\n  :host {\r\n    right: 12px;\r\n    bottom: 12px;\r\n  }\r\n}");
-  const toast = createToast();
-  const { panel, compactToggle } = createOptionsPanel(preferences);
-  const { control, exportButton, menuButton, downloadIcon, exportLabel } = createExportControl();
+  const { host, shadow } = Ui.createShadowRoot(ROOT_ID, ":host {\r\n  all: initial;\r\n  position: fixed;\r\n  right: 22px;\r\n  bottom: 22px;\r\n  z-index: 2147483647;\r\n  font-family: \"Google Sans\", system-ui, -apple-system, sans-serif;\r\n}\r\n\r\n.stack {\r\n  display: flex;\r\n  flex-direction: column;\r\n  align-items: flex-end;\r\n  gap: 10px;\r\n}\r\n\r\nbutton,\r\ninput {\r\n  font: inherit;\r\n}\r\n\r\nbutton {\r\n  appearance: none;\r\n  border: 0;\r\n  cursor: pointer;\r\n}\r\n\r\n.control {\r\n  display: flex;\r\n  overflow: hidden;\r\n  border: 1px solid rgba(255, 255, 255, 0.22);\r\n  border-radius: 999px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.export-button,\r\n.menu-button {\r\n  display: inline-flex;\r\n  min-height: 42px;\r\n  align-items: center;\r\n  justify-content: center;\r\n  background: transparent;\r\n  color: inherit;\r\n}\r\n\r\n.export-button {\r\n  gap: 8px;\r\n  min-width: 142px;\r\n  padding: 0 16px;\r\n  font-weight: 650;\r\n  white-space: nowrap;\r\n  transition: min-width 120ms ease, padding 120ms ease;\r\n}\r\n\r\n.download-icon {\r\n  font-size: 18px;\r\n  line-height: 1;\r\n}\r\n\r\n.menu-button {\r\n  width: 38px;\r\n  border-left: 1px solid rgba(255, 255, 255, 0.16);\r\n  font-size: 21px;\r\n  line-height: 1;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-button {\r\n  min-width: 42px;\r\n  padding: 0 12px;\r\n}\r\n\r\n.control[data-collapsed=\"true\"] .export-label {\r\n  display: none;\r\n}\r\n\r\n.export-button:hover,\r\n.menu-button:hover {\r\n  background: #303030;\r\n}\r\n\r\nbutton:focus-visible {\r\n  outline: 3px solid #a8c7fa;\r\n  outline-offset: -3px;\r\n}\r\n\r\nbutton:disabled {\r\n  cursor: progress;\r\n  opacity: 0.72;\r\n}\r\n\r\n.panel {\r\n  box-sizing: border-box;\r\n  width: min(270px, calc(100vw - 32px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 14px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  padding: 14px;\r\n  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.34);\r\n}\r\n\r\n.panel[hidden] {\r\n  display: none;\r\n}\r\n\r\n.panel-heading {\r\n  margin: 0 0 10px;\r\n  font-size: 13px;\r\n  font-weight: 700;\r\n  letter-spacing: 0.01em;\r\n}\r\n\r\n.option {\r\n  display: grid;\r\n  grid-template-columns: 20px minmax(0, 1fr);\r\n  gap: 9px;\r\n  align-items: start;\r\n  border-radius: 9px;\r\n  cursor: pointer;\r\n  padding: 8px 6px;\r\n}\r\n\r\n.option:hover {\r\n  background: rgba(255, 255, 255, 0.07);\r\n}\r\n\r\n.option input {\r\n  width: 16px;\r\n  height: 16px;\r\n  margin: 1px 0 0;\r\n  accent-color: #a8c7fa;\r\n}\r\n\r\n.option-copy {\r\n  display: flex;\r\n  min-width: 0;\r\n  flex-direction: column;\r\n  gap: 3px;\r\n}\r\n\r\n.option-label {\r\n  font-size: 13px;\r\n  font-weight: 650;\r\n  line-height: 1.2;\r\n}\r\n\r\n.option-description {\r\n  color: #c7c7c7;\r\n  font-size: 11px;\r\n  font-weight: 450;\r\n  line-height: 1.35;\r\n}\r\n\r\n.compact-toggle {\r\n  width: 100%;\r\n  margin-top: 10px;\r\n  border-top: 1px solid rgba(255, 255, 255, 0.14);\r\n  background: transparent;\r\n  color: #a8c7fa;\r\n  padding: 12px 6px 3px;\r\n  text-align: left;\r\n  font-size: 12px;\r\n  font-weight: 650;\r\n}\r\n\r\n.compact-toggle:hover {\r\n  color: #d3e3fd;\r\n}\r\n\r\n.toast {\r\n  box-sizing: border-box;\r\n  display: none;\r\n  max-width: min(420px, calc(100vw - 44px));\r\n  border: 1px solid rgba(255, 255, 255, 0.18);\r\n  border-radius: 12px;\r\n  background: #1f1f1f;\r\n  color: #fff;\r\n  font: 500 13px/1.45 system-ui, -apple-system, sans-serif;\r\n  padding: 11px 13px;\r\n  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);\r\n}\r\n\r\n.toast[data-kind=\"error\"] {\r\n  background: #8c1d18;\r\n}\r\n\r\n@media (max-width: 520px) {\r\n  :host {\r\n    right: 12px;\r\n    bottom: 12px;\r\n  }\r\n}");
+  const toast = Ui.createToast();
+  const optionsPanel = Ui.createOptionsPanel({
+    heading: "Export options",
+    ariaLabel: "Export options",
+    options: [
+      {
+        label: "Conversation outline",
+        description: "Linked turn list with short prompt previews",
+        checked: preferences.includeOutline,
+        onChange(value) {
+          preferences.includeOutline = value;
+          PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
+        },
+      },
+      {
+        label: "Export metadata",
+        description: "Source, export details, validation and turn IDs",
+        checked: preferences.includeMetadata,
+        onChange(value) {
+          preferences.includeMetadata = value;
+          PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
+        },
+      },
+    ],
+  });
+  const exportControl = Ui.createExportControl({
+    buttonLabel: "Export Markdown",
+    buttonAriaLabel: "Export Markdown",
+    menuAriaLabel: "Export options",
+  });
 
-  const stack = document.createElement("div");
-  stack.className = "stack";
-  stack.append(toast.element, panel, control);
+  const stack = Ui.createStack("stack", toast.element, optionsPanel.panel, exportControl.control);
   shadow.append(stack);
 
   function setPanelOpen(open) {
-    panel.hidden = !open;
-    menuButton.setAttribute("aria-expanded", String(open));
+    optionsPanel.setOpen(open);
+    exportControl.setMenuExpanded(open);
   }
 
   function setCollapsed(collapsed, persist = true) {
     preferences.collapsed = collapsed;
-    control.dataset.collapsed = String(collapsed);
-    exportButton.title = collapsed ? "Export Markdown" : "";
-    compactToggle.textContent = collapsed
-      ? "Use expanded control"
-      : "Use compact control";
-
+    exportControl.setCollapsed(collapsed, { title: "Export Markdown" });
+    optionsPanel.setCompactToggleLabel(
+      collapsed ? "Use expanded control" : "Use compact control",
+    );
     if (persist) {
       PreferenceStorage.writeBoolean(PREFERENCE_KEYS.collapsed, collapsed);
     }
@@ -1057,10 +1174,11 @@ const PREFERENCE_KEYS = Object.freeze({
     }
 
     setPanelOpen(false);
-    exportButton.disabled = true;
-    exportButton.setAttribute("aria-label", "Exporting");
-    downloadIcon.textContent = "…";
-    exportLabel.textContent = "Exporting…";
+    exportControl.setBusy(true, {
+      icon: "…",
+      label: "Exporting…",
+      ariaLabel: "Exporting",
+    });
 
     try {
       const history = await Core.collectHistoryPages((cursor) =>
@@ -1103,18 +1221,19 @@ const PREFERENCE_KEYS = Object.freeze({
         15_000,
       );
     } finally {
-      exportButton.disabled = false;
-      exportButton.setAttribute("aria-label", "Export Markdown");
-      downloadIcon.textContent = "↓";
-      exportLabel.textContent = "Export Markdown";
+      exportControl.setBusy(false, {
+        icon: "↓",
+        label: "Export Markdown",
+        ariaLabel: "Export Markdown",
+      });
     }
   }
 
-  exportButton.addEventListener("click", exportCurrentConversation);
-  menuButton.addEventListener("click", () => {
-    setPanelOpen(panel.hidden);
+  exportControl.exportButton.addEventListener("click", exportCurrentConversation);
+  exportControl.menuButton.addEventListener("click", () => {
+    setPanelOpen(!optionsPanel.panel.hidden);
   });
-  compactToggle.addEventListener("click", () => {
+  optionsPanel.compactToggle.addEventListener("click", () => {
     setCollapsed(!preferences.collapsed);
     setPanelOpen(false);
   });

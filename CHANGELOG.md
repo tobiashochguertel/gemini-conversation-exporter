@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0 - 2026-07-27 (fork)
+
+- Fork from [dikelps/gemini-conversation-exporter](https://github.com/dikelps/gemini-conversation-exporter).
+- Externalize Shadow DOM CSS into `src/exporter-ui.css`, inlined at build time
+  via a `__EXPORTER_UI_CSS__` token replaced with `JSON.stringify`.
+- Extract generic Tampermonkey preference wrappers into `src/preference-storage.js`
+  (`PreferenceStorage.readBoolean` / `writeBoolean`).
+- Extract generic utilities into `src/utils.js` (`Utils.makeRequestId`,
+  `Utils.cloneForPageRealm`, `Utils.downloadTextFile`).
+- Extract generic paginated history fetcher into `src/history-fetcher.js`
+  (`HistoryFetcher.fetchPage`) using an adapter pattern. Site-specific behavior
+  is injected via `createGeminiAdapter` in `userscript-main.js`.
+- Extract generic Shadow DOM UI builders into `src/ui.js` (`Ui.createShadowRoot`,
+  `createToast`, `createCheckboxOption`, `createExportControl`, `createOptionsPanel`,
+  `createStack`). Builders return state setters (`setOpen`, `setBusy`,
+  `setCollapsed`, `setMenuExpanded`, `setCompactToggleLabel`) so callers compose
+  UI state without touching DOM directly.
+- Move static constants (`ROOT_ID`, `HISTORY_PAGE_SIZE`, `PREFERENCE_KEYS`) before
+  the IIFE for a clear boundary between config and runtime logic.
+- Remove the 240-line `createUi` wrapper — UI assembly is now inline in the IIFE
+  using focused builder functions.
+- Update author, homepage, support URL, and repository links to the fork.
+- Add fork notice to README and dual copyright to LICENSE.
+- Add 42 new tests across `test/preference-storage.test.js`,
+  `test/utils.test.js`, `test/history-fetcher.test.js`, and `test/ui.test.js`.
+
 ## 0.1.8 - 2026-07-27
 
 - Load the userscript throughout `https://gemini.google.com/*` so Gemini can

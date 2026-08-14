@@ -117,133 +117,6 @@ const PREFERENCE_KEYS = Object.freeze({
     return HistoryFetcher.fetchPage(adapter, cursor);
   }
 
-  // ── UI builder functions ──────────────────────────────────────────────
-
-  function createShadowRoot(rootId, cssText) {
-    const host = document.createElement("div");
-    host.id = rootId;
-    const shadow = host.attachShadow({ mode: "open" });
-    const style = document.createElement("style");
-    style.textContent = cssText;
-    shadow.append(style);
-    return { host, shadow };
-  }
-
-  function createToast() {
-    const element = document.createElement("div");
-    element.className = "toast";
-    element.setAttribute("role", "status");
-    element.setAttribute("aria-live", "polite");
-    let timer = null;
-
-    function show(message, kind = "success", duration = 8_000) {
-      clearTimeout(timer);
-      element.textContent = message;
-      element.dataset.kind = kind;
-      element.style.display = "block";
-      timer = setTimeout(() => {
-        element.style.display = "none";
-      }, duration);
-    }
-
-    return { element, show };
-  }
-
-  function createCheckboxOption({ label, description, checked, onChange }) {
-    const option = document.createElement("label");
-    option.className = "option";
-
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = checked;
-    input.addEventListener("change", () => onChange(input.checked));
-
-    const copy = document.createElement("span");
-    copy.className = "option-copy";
-
-    const optionLabel = document.createElement("span");
-    optionLabel.className = "option-label";
-    optionLabel.textContent = label;
-
-    const optionDescription = document.createElement("span");
-    optionDescription.className = "option-description";
-    optionDescription.textContent = description;
-
-    copy.append(optionLabel, optionDescription);
-    option.append(input, copy);
-    return { option, input };
-  }
-
-  function createExportControl() {
-    const control = document.createElement("div");
-    control.className = "control";
-
-    const exportButton = document.createElement("button");
-    exportButton.type = "button";
-    exportButton.className = "export-button";
-    exportButton.setAttribute("aria-label", "Export Markdown");
-
-    const downloadIcon = document.createElement("span");
-    downloadIcon.className = "download-icon";
-    downloadIcon.setAttribute("aria-hidden", "true");
-    downloadIcon.textContent = "↓";
-
-    const exportLabel = document.createElement("span");
-    exportLabel.className = "export-label";
-    exportLabel.textContent = "Export Markdown";
-
-    exportButton.append(downloadIcon, exportLabel);
-
-    const menuButton = document.createElement("button");
-    menuButton.type = "button";
-    menuButton.className = "menu-button";
-    menuButton.textContent = "⋮";
-    menuButton.setAttribute("aria-label", "Export options");
-    menuButton.setAttribute("aria-haspopup", "dialog");
-    menuButton.setAttribute("aria-expanded", "false");
-
-    control.append(exportButton, menuButton);
-    return { control, exportButton, menuButton, downloadIcon, exportLabel };
-  }
-
-  function createOptionsPanel(preferences) {
-    const panel = document.createElement("div");
-    panel.className = "panel";
-    panel.hidden = true;
-    panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-label", "Export options");
-
-    const panelHeading = document.createElement("p");
-    panelHeading.className = "panel-heading";
-    panelHeading.textContent = "Export options";
-
-    const outlineOption = createCheckboxOption({
-      label: "Conversation outline",
-      description: "Linked turn list with short prompt previews",
-      checked: preferences.includeOutline,
-      onChange(value) {
-        preferences.includeOutline = value;
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
-      },
-    });
-    const metadataOption = createCheckboxOption({
-      label: "Export metadata",
-      description: "Source, export details, validation and turn IDs",
-      checked: preferences.includeMetadata,
-      onChange(value) {
-        preferences.includeMetadata = value;
-        PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
-      },
-    });
-
-    const compactToggle = document.createElement("button");
-    compactToggle.type = "button";
-    compactToggle.className = "compact-toggle";
-
-    panel.append(panelHeading, outlineOption.option, metadataOption.option, compactToggle);
-    return { panel, compactToggle };
-  }
-
   // ── UI assembly + export logic ─────────────────────────────────────────
 
   const preferences = {
@@ -258,29 +131,52 @@ const PREFERENCE_KEYS = Object.freeze({
     ),
   };
 
-  const { host, shadow } = createShadowRoot(ROOT_ID, __EXPORTER_UI_CSS__);
-  const toast = createToast();
-  const { panel, compactToggle } = createOptionsPanel(preferences);
-  const { control, exportButton, menuButton, downloadIcon, exportLabel } = createExportControl();
+  const { host, shadow } = Ui.createShadowRoot(ROOT_ID, __EXPORTER_UI_CSS__);
+  const toast = Ui.createToast();
+  const optionsPanel = Ui.createOptionsPanel({
+    heading: "Export options",
+    ariaLabel: "Export options",
+    options: [
+      {
+        label: "Conversation outline",
+        description: "Linked turn list with short prompt previews",
+        checked: preferences.includeOutline,
+        onChange(value) {
+          preferences.includeOutline = value;
+          PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeOutline, value);
+        },
+      },
+      {
+        label: "Export metadata",
+        description: "Source, export details, validation and turn IDs",
+        checked: preferences.includeMetadata,
+        onChange(value) {
+          preferences.includeMetadata = value;
+          PreferenceStorage.writeBoolean(PREFERENCE_KEYS.includeMetadata, value);
+        },
+      },
+    ],
+  });
+  const exportControl = Ui.createExportControl({
+    buttonLabel: "Export Markdown",
+    buttonAriaLabel: "Export Markdown",
+    menuAriaLabel: "Export options",
+  });
 
-  const stack = document.createElement("div");
-  stack.className = "stack";
-  stack.append(toast.element, panel, control);
+  const stack = Ui.createStack("stack", toast.element, optionsPanel.panel, exportControl.control);
   shadow.append(stack);
 
   function setPanelOpen(open) {
-    panel.hidden = !open;
-    menuButton.setAttribute("aria-expanded", String(open));
+    optionsPanel.setOpen(open);
+    exportControl.setMenuExpanded(open);
   }
 
   function setCollapsed(collapsed, persist = true) {
     preferences.collapsed = collapsed;
-    control.dataset.collapsed = String(collapsed);
-    exportButton.title = collapsed ? "Export Markdown" : "";
-    compactToggle.textContent = collapsed
-      ? "Use expanded control"
-      : "Use compact control";
-
+    exportControl.setCollapsed(collapsed, { title: "Export Markdown" });
+    optionsPanel.setCompactToggleLabel(
+      collapsed ? "Use expanded control" : "Use compact control",
+    );
     if (persist) {
       PreferenceStorage.writeBoolean(PREFERENCE_KEYS.collapsed, collapsed);
     }
@@ -294,10 +190,11 @@ const PREFERENCE_KEYS = Object.freeze({
     }
 
     setPanelOpen(false);
-    exportButton.disabled = true;
-    exportButton.setAttribute("aria-label", "Exporting");
-    downloadIcon.textContent = "…";
-    exportLabel.textContent = "Exporting…";
+    exportControl.setBusy(true, {
+      icon: "…",
+      label: "Exporting…",
+      ariaLabel: "Exporting",
+    });
 
     try {
       const history = await Core.collectHistoryPages((cursor) =>
@@ -340,18 +237,19 @@ const PREFERENCE_KEYS = Object.freeze({
         15_000,
       );
     } finally {
-      exportButton.disabled = false;
-      exportButton.setAttribute("aria-label", "Export Markdown");
-      downloadIcon.textContent = "↓";
-      exportLabel.textContent = "Export Markdown";
+      exportControl.setBusy(false, {
+        icon: "↓",
+        label: "Export Markdown",
+        ariaLabel: "Export Markdown",
+      });
     }
   }
 
-  exportButton.addEventListener("click", exportCurrentConversation);
-  menuButton.addEventListener("click", () => {
-    setPanelOpen(panel.hidden);
+  exportControl.exportButton.addEventListener("click", exportCurrentConversation);
+  exportControl.menuButton.addEventListener("click", () => {
+    setPanelOpen(!optionsPanel.panel.hidden);
   });
-  compactToggle.addEventListener("click", () => {
+  optionsPanel.compactToggle.addEventListener("click", () => {
     setCollapsed(!preferences.collapsed);
     setPanelOpen(false);
   });

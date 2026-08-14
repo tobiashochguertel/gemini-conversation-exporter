@@ -418,7 +418,7 @@ test("built userscript contains inlined CSS without the raw token", () => {
   const built = fs.readFileSync(distPath, "utf8");
 
   assert.doesNotMatch(built, /__EXPORTER_UI_CSS__/);
-  assert.match(built, /createShadowRoot\([^,]+,\s*"/);
+  assert.match(built, /Ui\.createShadowRoot\([^,]+,\s*"/);
   assert.match(built, /:host/);
 });
 

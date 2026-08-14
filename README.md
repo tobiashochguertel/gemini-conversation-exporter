@@ -1,5 +1,10 @@
 # Gemini Conversation Exporter
 
+> **Fork notice:** This is a fork of
+> [dikelps/gemini-conversation-exporter](https://github.com/dikelps/gemini-conversation-exporter)
+> with refactoring improvements (modular architecture, extracted framework
+> libraries, externalized CSS).
+
 A local Tampermonkey userscript that exports the currently open Gemini Web
 conversation as Markdown.
 

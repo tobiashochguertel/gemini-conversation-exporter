@@ -1,17 +1,17 @@
 {
   "name": "gemini-conversation-exporter",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "private": true,
   "description": "Reliable single-conversation Markdown exporter for Gemini Web",
-  "author": "dikelps",
+  "author": "tobiashochguertel",
   "license": "MIT",
-  "homepage": "https://github.com/dikelps/gemini-conversation-exporter",
+  "homepage": "https://github.com/tobiashochguertel/gemini-conversation-exporter",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dikelps/gemini-conversation-exporter.git"
+    "url": "https://github.com/tobiashochguertel/gemini-conversation-exporter.git"
   },
   "bugs": {
-    "url": "https://github.com/dikelps/gemini-conversation-exporter/issues"
+    "url": "https://github.com/tobiashochguertel/gemini-conversation-exporter/issues"
   },
   "engines": {
     "node": ">=18"

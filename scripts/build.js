@@ -20,10 +20,10 @@ const metadata = `// ==UserScript==
 // @namespace    local.gemini-web-exporter
 // @version      ${packageJson.version}
 // @description  Export the current Gemini conversation as validated Markdown using Gemini's own paginated history data.
-// @author       dikelps
+// @author       tobiashochguertel
 // @license      MIT
-// @homepageURL  https://github.com/dikelps/gemini-conversation-exporter
-// @supportURL   https://github.com/dikelps/gemini-conversation-exporter/issues
+// @homepageURL  https://github.com/tobiashochguertel/gemini-conversation-exporter
+// @supportURL   https://github.com/tobiashochguertel/gemini-conversation-exporter/issues
 // @match        https://gemini.google.com/*
 // @match        https://gemini.google.com/app
 // @match        https://gemini.google.com/app/*
@@ -41,6 +41,7 @@ const metadata = `// ==UserScript==
 const preferenceStoragePath = path.join(projectRoot, "src", "preference-storage.js");
 const utilsPath = path.join(projectRoot, "src", "utils.js");
 const historyFetcherPath = path.join(projectRoot, "src", "history-fetcher.js");
+const uiPath = path.join(projectRoot, "src", "ui.js");
 
 const cssContent = fs.readFileSync(cssPath, "utf8").trim();
 const mainContent = fs.readFileSync(mainPath, "utf8")
@@ -56,6 +57,8 @@ const output = [
   fs.readFileSync(utilsPath, "utf8").trim(),
   "",
   fs.readFileSync(historyFetcherPath, "utf8").trim(),
+  "",
+  fs.readFileSync(uiPath, "utf8").trim(),
   "",
   mainContent.trim(),
   "",
