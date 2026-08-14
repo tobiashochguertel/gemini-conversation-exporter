@@ -1523,9 +1523,9 @@ const Ui = Object.freeze({
       const opt = document.createElement("option");
       opt.value = choice.value;
       opt.textContent = choice.label;
-      if (choice.value === value) opt.selected = true;
       select.append(opt);
     }
+    select.value = value;
     select.addEventListener("change", () => onChange(select.value));
 
     copy.append(optionLabel, optionDescription);
