@@ -358,3 +358,66 @@ test("userscript metadata covers the Gemini origin and app routes", () => {
   );
   assert.match(buildScript, /@sandbox\s+JavaScript/);
 });
+
+test("CSS is externalized and referenced via a build-time token", () => {
+  const userscriptMain = fs.readFileSync(
+    path.resolve(__dirname, "../src/userscript-main.js"),
+    "utf8",
+  );
+  const cssPath = path.resolve(__dirname, "../src/exporter-ui.css");
+  const cssExists = fs.existsSync(cssPath);
+
+  assert.ok(cssExists, "src/exporter-ui.css should exist");
+  assert.match(
+    userscriptMain,
+    /__EXPORTER_UI_CSS__/,
+    "userscript-main.js should reference the __EXPORTER_UI_CSS__ token",
+  );
+  assert.doesNotMatch(
+    userscriptMain,
+    /style\.textContent\s*=\s*`/,
+    "userscript-main.js should not contain inline CSS template literals",
+  );
+});
+
+test("externalized CSS contains the expected Shadow DOM rules", () => {
+  const css = fs.readFileSync(
+    path.resolve(__dirname, "../src/exporter-ui.css"),
+    "utf8",
+  );
+
+  for (const selector of [":host", ".stack", ".control", ".export-button", ".menu-button", ".panel", ".toast", ".compact-toggle"]) {
+    assert.match(css, new RegExp(escapeRegExp(selector)));
+  }
+  assert.match(css, /@media\s*\(\s*max-width:\s*520px\s*\)/);
+});
+
+test("build script reads and inlines the external CSS file", () => {
+  const buildScript = fs.readFileSync(
+    path.resolve(__dirname, "../scripts/build.js"),
+    "utf8",
+  );
+
+  assert.match(buildScript, /exporter-ui\.css/);
+  assert.match(buildScript, /__EXPORTER_UI_CSS__/);
+  assert.match(buildScript, /JSON\.stringify\(cssContent\)/);
+});
+
+test("built userscript contains inlined CSS without the raw token", () => {
+  const distPath = path.resolve(__dirname, "../dist/gemini-conversation-exporter.user.js");
+
+  if (!fs.existsSync(distPath)) {
+    // Build hasn't run yet — skip gracefully
+    return;
+  }
+
+  const built = fs.readFileSync(distPath, "utf8");
+
+  assert.doesNotMatch(built, /__EXPORTER_UI_CSS__/);
+  assert.match(built, /style\.textContent\s*=\s*"/);
+  assert.match(built, /:host/);
+});
+
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

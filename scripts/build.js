@@ -7,6 +7,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const packagePath = path.join(projectRoot, "package.json");
 const corePath = path.join(projectRoot, "src", "core.js");
 const mainPath = path.join(projectRoot, "src", "userscript-main.js");
+const cssPath = path.join(projectRoot, "src", "exporter-ui.css");
 const outputDirectory = path.join(projectRoot, "dist");
 const outputPath = path.join(
   outputDirectory,
@@ -37,12 +38,16 @@ const metadata = `// ==UserScript==
 // ==/UserScript==
 `;
 
+const cssContent = fs.readFileSync(cssPath, "utf8").trim();
+const mainContent = fs.readFileSync(mainPath, "utf8")
+  .replace("__EXPORTER_UI_CSS__", JSON.stringify(cssContent));
+
 const output = [
   metadata.trimEnd(),
   "",
   fs.readFileSync(corePath, "utf8").trim(),
   "",
-  fs.readFileSync(mainPath, "utf8").trim(),
+  mainContent.trim(),
   "",
 ].join("\n");
 
