@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.4 - 2026-08-14
+
+## Fixed
+
+- Fixed binary file downloads failing in Firefox due to Xray wrapper boundary restrictions when accessing page-realm `ArrayBuffer` data (ae0eb23).
+
 ## 0.7.3 - 2026-08-14
 
 ## Fixed
