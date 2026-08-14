@@ -5,47 +5,37 @@ const path = require("node:path");
 const UserscriptMetadata = require("../src/userscript-metadata");
 
 const projectRoot = path.resolve(__dirname, "..");
-const packagePath = path.join(projectRoot, "package.json");
-const corePath = path.join(projectRoot, "src", "core.js");
-const mainPath = path.join(projectRoot, "src", "userscript-main.js");
-const cssPath = path.join(projectRoot, "src", "exporter-ui.css");
-const outputDirectory = path.join(projectRoot, "dist");
-const outputPath = path.join(
-  outputDirectory,
-  "gemini-conversation-exporter.user.js",
-);
-const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+const src = (...parts) => path.join(projectRoot, "src", ...parts);
+const dist = (...parts) => path.join(projectRoot, "dist", ...parts);
+const readSrc = (file) => fs.readFileSync(src(file), "utf8").trim();
 
-const metadata = UserscriptMetadata.build(packageJson, {
-  distPath: "dist/gemini-conversation-exporter.user.js",
-});
+const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+const outputName = `${packageJson.name}.user.js`;
+const distPath = `dist/${outputName}`;
 
-const preferenceStoragePath = path.join(projectRoot, "src", "preference-storage.js");
-const utilsPath = path.join(projectRoot, "src", "utils.js");
-const historyFetcherPath = path.join(projectRoot, "src", "history-fetcher.js");
-const uiPath = path.join(projectRoot, "src", "ui.js");
+const metadata = UserscriptMetadata.build(packageJson, { distPath });
 
-const cssContent = fs.readFileSync(cssPath, "utf8").trim();
-const mainContent = fs.readFileSync(mainPath, "utf8")
-  .replace("__EXPORTER_UI_CSS__", JSON.stringify(cssContent));
+// Module concatenation order: metadata → core → preference-storage →
+// utils → history-fetcher → ui → userscript-main.
+const modules = [
+  metadata,
+  readSrc("core.js"),
+  readSrc("preference-storage.js"),
+  readSrc("utils.js"),
+  readSrc("history-fetcher.js"),
+  readSrc("ui.js"),
+  readSrc("userscript-main.js"),
+];
 
-const output = [
-  metadata.trimEnd(),
-  "",
-  fs.readFileSync(corePath, "utf8").trim(),
-  "",
-  fs.readFileSync(preferenceStoragePath, "utf8").trim(),
-  "",
-  fs.readFileSync(utilsPath, "utf8").trim(),
-  "",
-  fs.readFileSync(historyFetcherPath, "utf8").trim(),
-  "",
-  fs.readFileSync(uiPath, "utf8").trim(),
-  "",
-  mainContent.trim(),
-  "",
-].join("\n");
+// Inline external CSS into the userscript via a build-time token.
+const cssToken = "__EXPORTER_UI_CSS__";
+const cssContent = JSON.stringify(readSrc("exporter-ui.css"));
 
-fs.mkdirSync(outputDirectory, { recursive: true });
-fs.writeFileSync(outputPath, output, "utf8");
-console.log(`Built ${path.relative(projectRoot, outputPath)}`);
+const output = `${modules
+  .map((m) => m.trim())
+  .join("\n\n")
+  .replace(cssToken, cssContent)}\n`;
+
+fs.mkdirSync(dist(), { recursive: true });
+fs.writeFileSync(dist(outputName), output, "utf8");
+console.log(`Built ${distPath}`);

@@ -406,7 +406,7 @@ test("build script reads and inlines the external CSS file", () => {
 
   assert.match(buildScript, /exporter-ui\.css/);
   assert.match(buildScript, /__EXPORTER_UI_CSS__/);
-  assert.match(buildScript, /JSON\.stringify\(cssContent\)/);
+  assert.match(buildScript, /JSON\.stringify/);
 });
 
 test("built userscript contains inlined CSS without the raw token", () => {
