@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 - 2026-08-14
+
+## Fixed
+
+- Fixed settings dropdown selection in Firefox by setting the select value after appending options (`ac207fe`).
+
 ## 0.7.0 - 2026-08-14
 
 ## Added
