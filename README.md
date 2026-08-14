@@ -106,10 +106,22 @@ Use the adjacent **⋮** button to:
 
 - include or omit the linked conversation outline;
 - include or omit source, export, validation, and per-turn metadata;
-- switch between the expanded and compact export control.
+- switch between the expanded and compact export control;
+- choose a download strategy (see below).
 
-All three preferences are stored by Tampermonkey and persist across browser
+All four preferences are stored by Tampermonkey and persist across browser
 sessions. The outline and metadata are enabled by default.
+
+### Download strategies
+
+| Strategy | Description |
+|----------|-------------|
+| **Link only** (default) | Renders authenticated download URLs as links in the Markdown/JSON output. No file download. |
+| **ZIP bundle** | Downloads all generated files (images, documents, etc.) and bundles them with the Markdown and JSON export into a single `.zip` file. Uses [fflate](https://github.com/101arrowz/fflate) for ZIP creation. |
+
+The ZIP bundle strategy fetches generated files using the page's authenticated
+session (Google cookies) and includes them in the archive under
+`generated-files/`.
 
 Tampermonkey stores the userscript in the current browser profile. It persists
 across browser restarts; the local server is needed only while installing or
@@ -156,10 +168,21 @@ Gemini's API response is preserved in the output.
 
 - Exports the active branch of the currently open conversation.
 - Does not traverse the Gemini sidebar or bulk-export account history.
-- Does not download uploaded files or generated media.
 - Uses an undocumented Gemini Web RPC. If Google changes that response shape,
   the exporter is designed to stop with an error instead of silently writing a
   partial or reordered file.
+
+## Browser compatibility
+
+The userscript uses `@sandbox raw` (Tampermonkey's default), running in the
+page context (`MAIN_WORLD`). This is required for the ZIP bundle feature to
+work on Firefox — Firefox's `USERSCRIPT_WORLD` (used by `@sandbox JavaScript`)
+applies Xray security wrappers that block access to `TypedArray`/
+`ArrayBuffer` data across realms, breaking `TextEncoder`, `fetch.arrayBuffer()`,
+`Blob`, and other Web APIs needed for binary file handling.
+
+See the [JSZip Xray Test gist](https://gist.github.com/tobiashochguertel/eb70fbd57f5c7bdea7b4381d3bfdfec1)
+for a detailed investigation of the Xray boundary issue.
 
 ## Development
 
