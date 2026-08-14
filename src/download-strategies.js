@@ -40,6 +40,41 @@ const DownloadStrategies = Object.freeze({
   ]),
 
   /**
+   * Encode a string as UTF-8 bytes without using TextEncoder.
+   * On Firefox (JavaScript sandbox), TextEncoder is a page-realm object,
+   * so its returned Uint8Array is in the page realm and cannot be accessed
+   * by fflate (userscript realm) due to Xray restrictions.
+   * @param {string} str - String to encode.
+   * @returns {Uint8Array} UTF-8 bytes in the userscript realm.
+   */
+  strToUtf8Bytes(str) {
+    const bytes = [];
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      if (c < 0x80) {
+        bytes.push(c);
+      } else if (c < 0x800) {
+        bytes.push(0xc0 | (c >> 6));
+        bytes.push(0x80 | (c & 0x3f));
+      } else if (c < 0xd800 || c >= 0xe000) {
+        bytes.push(0xe0 | (c >> 12));
+        bytes.push(0x80 | ((c >> 6) & 0x3f));
+        bytes.push(0x80 | (c & 0x3f));
+      } else {
+        // Surrogate pair (U+10000–U+10FFFF)
+        i++;
+        const c2 = str.charCodeAt(i);
+        const cp = 0x10000 + (((c & 0x3ff) << 10) | (c2 & 0x3ff));
+        bytes.push(0xf0 | (cp >> 18));
+        bytes.push(0x80 | ((cp >> 12) & 0x3f));
+        bytes.push(0x80 | ((cp >> 6) & 0x3f));
+        bytes.push(0x80 | (cp & 0x3f));
+      }
+    }
+    return new Uint8Array(bytes);
+  },
+
+  /**
    * Collect all generated files from all turns.
    * @param {Array} turns - Chronological Turn objects.
    * @returns {Array} Array of { turn, file } objects.
@@ -136,7 +171,7 @@ const DownloadStrategies = Object.freeze({
       includeMetadata: preferences.includeMetadata,
       includeOutline: preferences.includeOutline,
     });
-    zipData[`${safeTitle}.md`] = new TextEncoder().encode(markdown);
+    zipData[`${safeTitle}.md`] = DownloadStrategies.strToUtf8Bytes(markdown);
 
     // Generate JSON content for the ZIP
     const json = Core.renderJson({
@@ -148,7 +183,7 @@ const DownloadStrategies = Object.freeze({
       diagnostics,
       includeMetadata: preferences.includeMetadata,
     });
-    zipData[`${safeTitle}.json`] = new TextEncoder().encode(json);
+    zipData[`${safeTitle}.json`] = DownloadStrategies.strToUtf8Bytes(json);
 
     // Download generated files
     const generatedFiles = DownloadStrategies.collectAllGeneratedFiles(turns);
@@ -178,7 +213,7 @@ const DownloadStrategies = Object.freeze({
       } catch (err) {
         // If a file fails, include an error note but continue
         const errorName = `${filesDir}/${DownloadStrategies.sanitizeZipFilename(file.filename)}.ERROR.txt`;
-        zipData[errorName] = new TextEncoder().encode(
+        zipData[errorName] = DownloadStrategies.strToUtf8Bytes(
           `Failed to download ${file.filename}: ${err.message}\nURL: ${file.downloadUrl}\n`,
         );
       }

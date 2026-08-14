@@ -25,6 +25,30 @@ test("definitions lists all available strategies", () => {
   assert.equal(ids.length, 2);
 });
 
+test("strToUtf8Bytes encodes ASCII correctly", () => {
+  const bytes = DownloadStrategies.strToUtf8Bytes("Hello");
+  assert.deepEqual(Array.from(bytes), [72, 101, 108, 108, 111]);
+});
+
+test("strToUtf8Bytes encodes multi-byte UTF-8 correctly", () => {
+  // "ü" = U+00FC → 0xC3 0xBC
+  const bytes = DownloadStrategies.strToUtf8Bytes("ü");
+  assert.deepEqual(Array.from(bytes), [0xc3, 0xbc]);
+});
+
+test("strToUtf8Bytes encodes emoji (surrogate pairs) correctly", () => {
+  // "🎉" = U+1F389 → 0xF0 0x9F 0x8E 0x89
+  const bytes = DownloadStrategies.strToUtf8Bytes("🎉");
+  assert.deepEqual(Array.from(bytes), [0xf0, 0x9f, 0x8e, 0x89]);
+});
+
+test("strToUtf8Bytes matches TextEncoder for complex string", () => {
+  const str = "Hello, 世界! 🎉 Café";
+  const expected = Array.from(new TextEncoder().encode(str));
+  const actual = Array.from(DownloadStrategies.strToUtf8Bytes(str));
+  assert.deepEqual(actual, expected);
+});
+
 test("collectAllGeneratedFiles returns empty for turns without generated files", () => {
   const turns = [
     { extensions: [{ index: 0, raw: {} }] },
