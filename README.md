@@ -3,10 +3,13 @@
 > **Fork notice:** This is a fork of
 > [dikelps/gemini-conversation-exporter](https://github.com/dikelps/gemini-conversation-exporter)
 > with refactoring improvements (modular architecture, extracted framework
-> libraries, externalized CSS).
+> libraries, externalized CSS, JSON export, complete turn data preservation).
+>
+> The installable userscript is published via GitHub:
+> [raw dist file](https://raw.githubusercontent.com/tobiashochguertel/gemini-conversation-exporter/main/dist/gemini-conversation-exporter.user.js)
 
 A local Tampermonkey userscript that exports the currently open Gemini Web
-conversation as Markdown.
+conversation as Markdown or JSON.
 
 Unlike DOM-scrolling exporters, it reads Gemini's own paginated conversation
 history response. The exporter keeps the active branch in server order and
@@ -18,7 +21,7 @@ The userscript runs only on `https://gemini.google.com/*`. It remains hidden
 outside conversation routes, including on the new-chat landing page, and
 appears after a conversation is opened. It makes no third-party requests and
 does not collect analytics. Conversation data stays between the signed-in
-Gemini page and the Markdown file downloaded by the browser.
+Gemini page and the file downloaded by the browser.
 
 ## Reliability behavior
 
@@ -51,6 +54,21 @@ dist/gemini-conversation-exporter.user.js
 
 ## Install
 
+### From GitHub (recommended)
+
+1. Install and enable Tampermonkey in Chrome or Firefox.
+2. Open the raw userscript URL:
+
+   ```
+   https://raw.githubusercontent.com/tobiashochguertel/gemini-conversation-exporter/main/dist/gemini-conversation-exporter.user.js
+   ```
+
+3. Approve the Tampermonkey installation or update.
+4. Open or reload a Gemini conversation.
+
+Tampermonkey will check for updates automatically via the `@updateURL`
+metadata directive pointing to the same raw URL on the `main` branch.
+
 ### Greasy Fork
 
 1. Install and enable Tampermonkey in Chrome or Firefox.
@@ -77,8 +95,12 @@ dist/gemini-conversation-exporter.user.js
 4. Approve the Tampermonkey installation or update.
 5. Open or reload a Gemini conversation.
 
-The script adds an **Export Markdown** button in the lower-right corner. One
-click downloads the complete active branch as a `.md` file.
+## Usage
+
+The script adds two export buttons in the lower-right corner:
+
+- **Export Markdown** (↓) — downloads the complete active branch as a `.md` file
+- **Export JSON** ({ }) — downloads the complete active branch as a `.json` file
 
 Use the adjacent **⋮** button to:
 
@@ -90,24 +112,45 @@ All three preferences are stored by Tampermonkey and persist across browser
 sessions. The outline and metadata are enabled by default.
 
 Tampermonkey stores the userscript in the current browser profile. It persists
-across Codex tasks and project restarts; the local server is needed only while
-installing or updating the script.
-
-Greasy Fork automatically syncs released code from the committed userscript on
-the `main` branch.
+across browser restarts; the local server is needed only while installing or
+updating the script from a local build.
 
 ## Output
 
-The file includes:
+### Markdown
+
+The `.md` file includes:
 
 - conversation title and source URL;
 - export timestamp, conversation ID, turn count, and validation fingerprint;
-- stable response/candidate identifiers in HTML comments;
 - a linked turn outline using short previews of user prompts and stable
   cross-renderer turn anchors;
-- explicit User and Gemini role boundaries;
+- per-turn HTML metadata comments with: turn number, source index, response
+  and parent response IDs, candidate and parent candidate IDs, timestamp,
+  model, and language;
+- explicit User, Thinking, and Gemini role boundaries;
 - the original user and Gemini Markdown, including `$...$` and `$$...$$`
-  equations, tables, lists, links, and fenced code.
+  equations, tables, lists, links, and fenced code;
+- thinking/reasoning text in a collapsible `<details>` block;
+- web search citations section;
+- extension/tool results in a collapsible `<details>` block with JSON payload;
+- feedback/rating groups in a collapsible `<details>` block with JSON payload.
+
+### JSON
+
+The `.json` file includes:
+
+- `title`, `sourceUrl`, `conversationId`, `exportedAt`, `turnCount`;
+- `validation` object with fingerprint, duplicate bodies, timestamp
+  regressions, and markdown warnings;
+- `turns` array where each turn contains: `index` (1-based chronological),
+  `sourceIndex` (0-based raw API position), `userMarkdown`,
+  `assistantMarkdown`, `responseId`, `parentResponseId`, `candidateId`,
+  `parentCandidateId`, `timestamp`, `model`, `language`, `thinking`,
+  `webCitations`, `extensions`, and `feedback`.
+
+Both formats export the complete turn object — every field extracted from
+Gemini's API response is preserved in the output.
 
 ## Scope and limitations
 
@@ -117,6 +160,30 @@ The file includes:
 - Uses an undocumented Gemini Web RPC. If Google changes that response shape,
   the exporter is designed to stop with an error instead of silently writing a
   partial or reordered file.
+
+## Development
+
+### Release workflow
+
+This project uses [conventional commits](https://www.conventionalcommits.org/)
+enforced by [hk](https://hk.jdx.dev) git hooks:
+
+- **commit-msg hook** — validates commit messages at commit time
+- **pre-push hook** — safety net that validates commit messages before they
+  reach the remote (catches `--no-verify` bypasses)
+
+To cut a release:
+
+```bash
+npm run release
+```
+
+This auto-detects the bump level (patch/minor/major) from conventional
+commits since the last tag, bumps the version, builds, tests, generates
+changelog via [communique](https://communique.jdx.dev), commits, tags, and
+pushes.
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the daily workflow guide.
 
 ## Maintenance note
 
