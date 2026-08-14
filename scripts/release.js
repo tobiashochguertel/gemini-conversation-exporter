@@ -11,7 +11,8 @@ const changelogPath = path.join(projectRoot, "CHANGELOG.md");
 // ── helpers ──────────────────────────────────────────────────────────
 
 function run(cmd, opts = {}) {
-  return execSync(cmd, { cwd: projectRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...opts }).trim();
+  const result = execSync(cmd, { cwd: projectRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...opts });
+  return result ? result.trim() : "";
 }
 
 function fail(msg) {
@@ -63,7 +64,9 @@ function detectBumpFromCommits() {
     const body = bodyLines.join("\n");
 
     // Breaking change: "feat!:" / "fix!:" or "BREAKING CHANGE:" footer
-    if (/![a-z]*:/.test(subject) || /BREAKING[ -]CHANGE/i.test(body)) {
+    // The footer is the last paragraph of the body, separated by a blank line.
+    const footer = body.split(/\n\s*\n/).pop() || "";
+    if (/^[a-z]+!:/.test(subject) || /^BREAKING[ -]CHANGE:/im.test(footer)) {
       return "major";
     }
     // New feature
