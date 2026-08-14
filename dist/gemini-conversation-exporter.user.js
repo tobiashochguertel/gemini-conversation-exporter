@@ -1765,12 +1765,32 @@ const DownloadStrategies = Object.freeze({
     }
     // The fetch response is from the page realm. On Firefox (JavaScript sandbox),
     // TypedArrays/ArrayBuffers from the page realm cannot be accessed via Xrays.
-    // Blobs are structured-cloneable and safe across realms, so we get a Blob
-    // first, then wrap it in a new Response constructed in the userscript realm.
-    // The resulting ArrayBuffer is in the userscript's own realm.
-    // See: https://github.com/greasemonkey/greasemonkey/issues/2034
+    // FileReader.readAsArrayBuffer() also creates the ArrayBuffer in the page
+    // realm, and new Response(blob).arrayBuffer() has the same issue.
+    //
+    // The only safe way to transfer binary data across realms is via a string
+    // (primitives are not Xrayed). We read the blob as a data URL (base64 string),
+    // then decode it in the userscript realm using atob() + Uint8Array.
+    // This is cross-browser compatible (Chrome, Firefox, Edge).
+    // Fall back to arrayBuffer() when FileReader is unavailable (e.g. Node.js).
     const blob = await res.blob();
-    const arrayBuffer = await new Response(blob).arrayBuffer();
+    if (typeof FileReader !== "undefined") {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Failed to read downloaded file"));
+        reader.readAsDataURL(blob);
+      });
+      // dataUrl is "data:<mime>;base64,<base64data>"
+      const base64 = dataUrl.split(",")[1];
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes;
+    }
+    const arrayBuffer = await blob.arrayBuffer();
     return new Uint8Array(arrayBuffer);
   },
 
