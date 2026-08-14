@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.6 - 2026-08-14
+
+## Fixed
+
+- Fixed image and file downloads failing in Firefox by reading blobs as base64 data URLs before converting to `Uint8Array`, bypassing Firefox's Xray restrictions on binary data across execution realms (`c592393`).
+
 ## 0.7.5 - 2026-08-14
 
 ## Fixed
