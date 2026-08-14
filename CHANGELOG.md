@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 - 2026-08-14
+
+## Added
+
+- Render full turn data in Markdown exports, including model name, language, parent response/candidate references in metadata comments, thinking process blocks, web citations, extension/tool results, and feedback in collapsible sections ([d91a00b](https://github.com/tobiashochguertel/gemini-conversation-exporter/commit/d91a00b5312527400b9d9c7192f809c3c06a4087), [c8d65a1](https://github.com/tobiashochguertel/gemini-conversation-exporter/commit/c8d65a115be09a9b326f648a79d0e838373d7cbf))
+- Include `sourceIndex` in both JSON and Markdown exports to trace exported turns back to their raw API positions ([ad76e02](https://github.com/tobiashochguertel/gemini-conversation-exporter/commit/ad76e023f7d38e004c8b64ee1ea392386a080d76))
+- Add TypeScript declarations (`types/core.d.ts`) and JSDoc type annotations for the `Turn` data model and Core API surface ([c8d65a1](https://github.com/tobiashochguertel/gemini-conversation-exporter/commit/c8d65a115be09a9b326f648a79d0e838373d7cbf))
+- Document Gemini's internal batch RPC history data model (`docs/gemini-api-data-model.md`) ([96216fc](https://github.com/tobiashochguertel/gemini-conversation-exporter/commit/96216fcb11b0b563f00117f9e19a33c6565ce2d8))
+
 ## 0.4.0 - 2026-08-14
 
 ## Added
